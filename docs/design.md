@@ -66,7 +66,7 @@ O Herdr, nesta máquina, em 2026-11-12, expõe `herdr api snapshot` e `herdr api
 
 ### Arquitetura
 
-Dois pacotes, no mesmo corte do tracker (`cmd/tracker` e `cmd/agent`): `cmd/recall` sobe o servidor e o painel; `cmd/agent` captura, envia e instala o serviço. O diretório `cmd/agent` não é o nome instalado. O binário do agente é `herdr-recall`. O binário do servidor é `herdr-recall-server`. Nenhum dos dois se instala como `agent`: a v0.1.0 do tracker cobriu o elo do Grok em `~/.local/bin/agent` (ADR 0025). Go **1.27.3**, o pin de `go.mod` do tracker, não um 1.27 solto. O `go.mod` do tracker diz `module ai-usage-tracker`, não o caminho do GitHub. Este produto faz o mesmo tipo de escolha: `module herdr-recall`. O agente usa a biblioteca padrão e um processo externo, `herdr api snapshot`. Não lê `/proc` nem `ps` no v1, e não tem banco. O servidor usa `modernc.org/sqlite` v1.61.0, o mesmo módulo do tracker, puro Go, sem CGO. Os arquivos do painel entram com `go:embed`. Um processo, um arquivo de banco.
+Dois pacotes, no mesmo corte do tracker (`cmd/tracker` e `cmd/agent`): `cmd/recall` sobe o servidor e o painel; `cmd/agent` captura, envia e instala o serviço. O diretório `cmd/agent` não é o nome instalado. O binário do agente é `herdr-recall`. O binário do servidor é `herdr-recall-server`. Nenhum dos dois se instala como `agent`: a v0.1.0 do tracker cobriu o elo do Grok em `~/.local/bin/agent` (ADR 0025). Go **1.27.4**, o patch estável de 10 de novembro de 2026. O tracker ainda declara 1.27.3. Não é um 1.27 solto. O `go.mod` do tracker diz `module ai-usage-tracker`, não o caminho do GitHub. Este produto faz o mesmo tipo de escolha: `module herdr-recall`. O agente usa a biblioteca padrão e um processo externo, `herdr api snapshot`. Não lê `/proc` nem `ps` no v1, e não tem banco. O servidor usa `modernc.org/sqlite` v1.61.0, o mesmo módulo do tracker, puro Go, sem CGO. Os arquivos do painel entram com `go:embed`. Um processo, um arquivo de banco.
 
 ```mermaid
 flowchart LR
@@ -969,7 +969,7 @@ Decisões tomadas aqui, para não voltarem como lacuna, estão em Key Decisions.
 
 1. Nome de trabalho **herdr-recall**, provisório, uma constante Go. Sem wordmark. Binário do agente: `herdr-recall`. Binário do servidor: `herdr-recall-server`. O pacote pode se chamar `cmd/agent`. O nome instalado não é `agent` (ADR 0025).
 2. O módulo Go é `herdr-recall`. O tracker faz isso: `go.mod` diz `module ai-usage-tracker`, e o caminho `github.com/lucaswilliameufrasio/ai-usage-tracker` é o remote, não o módulo. Não se copia o remote para dentro do `go.mod` “para espelhar”.
-3. Go 1.27.3 e `modernc.org/sqlite` v1.61.0, pins do tracker. Agente sem essa dependência. Servidor pode usar `golang.org/x/crypto/bcrypt`.
+3. Go 1.27.4. O tracker permanece em 1.27.3. `modernc.org/sqlite` v1.61.0 no servidor, puro Go, sem CGO. Agente sem essa dependência. Servidor pode usar `golang.org/x/crypto/bcrypt`.
 4. Bind `127.0.0.1:8788`. TLS obrigatório fora de loopback. Sem header de proxy no v1. `RECALL_SETUP_TOKEN` / `X-Setup-Token` seguem o ADR 0003: definida, o cabeçalho vale também em loopback; ausente, setup só em loopback.
 5. `boot_id` identifica o boot do kernel e não ordena. A ordem é `boots.first_received_at`, relógio do servidor, gravado uma vez na primeira presença ou no primeiro snapshot aceito. Replay não move esse campo. Evicção e “boot mais novo” usam essa coluna. Não se ordena `boot_id`.
 6. Presença a cada 60 s, sem cwd e sem sessão, retenção 15 minutos pelo `received_at` do servidor. `observed_at` continua o carimbo do agente e o balde da faixa. “Sem sinal” e `last_seen_at` usam `received_at`. `ON CONFLICT DO NOTHING` ainda é 200. Mesa só quando o conjunto muda. Isso não reabre a decisão de não guardar minuto a minuto no servidor.
@@ -991,7 +991,7 @@ O módulo de código ainda não existe. Cada PR é revisável sozinho. Nenhum de
 Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem fixtures do registro do Claude, do Grok e do OpenCode, um fixture Linux de `/proc/<pid>` e um procedimento de macOS que não use `/proc`. Se esse PR chamar `pane.process_info`, tem de dizer como `argv` e `cmdline` são descartados.
 
 1. **Criar o repositório e o módulo vazio**
-   - Arquivos: `go.mod` com `module herdr-recall` e Go 1.27.3, `cmd/recall/main.go` (binário `herdr-recall-server`), `cmd/agent/main.go` (binário `herdr-recall`), `.gitignore`, README curto com o nome provisório, o bind e a frase de que não se instala `agent`.
+   - Arquivos: `go.mod` com `module herdr-recall` e Go 1.27.4, `cmd/recall/main.go` (binário `herdr-recall-server`), `cmd/agent/main.go` (binário `herdr-recall`), `.gitignore`, README curto com o nome provisório, o bind e a frase de que não se instala `agent`.
    - Depende de: nada.
    - Os dois comandos sobem e saem. Sem rede de negócio e sem CSS.
 

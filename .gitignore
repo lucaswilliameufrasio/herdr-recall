@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+device.token
+spool.json
+dirsync-warn
+
+/bin/
+/herdr-recall
+/herdr-recall-server
+*.db
+*.db-shm
+*.db-wal
+
+.DS_Store
