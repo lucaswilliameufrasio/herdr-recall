@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"herdr-recall/internal/contract"
+	"herdr-recall/internal/web"
 )
 
 const testPassword = "senha-secreta-12"
@@ -350,7 +351,7 @@ func TestLoginCookieDoesNotRenew(t *testing.T) {
 		t.Fatal("validade da sessão")
 	}
 	home := h.call(http.MethodGet, "/", nil, cookieHeader(cookie))
-	if home.Code != http.StatusOK || home.Body.String() != "ok" {
+	if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), web.ProductName) {
 		t.Fatalf("status %d", home.Code)
 	}
 	var after string
@@ -372,6 +373,62 @@ func TestLoginCookieDoesNotRenew(t *testing.T) {
 	secureLogin := secure.call(http.MethodPost, "/acesso/entrar", []byte(`{"password":"`+testPassword+`"}`), jsonHeader(nil))
 	mustJSON(t, secureLogin, http.StatusOK, nil)
 	assertCookieFlags(t, secureLogin, true)
+}
+
+func TestHomeEmbedsTheShellAndLogout(t *testing.T) {
+	h := newHarness(t, Options{Loopback: true})
+	h.setupOperator(t)
+	cookie, csrf := h.login(t)
+	home := h.call(http.MethodGet, "/", nil, cookieHeader(cookie))
+	if home.Code != http.StatusOK {
+		t.Fatalf("status %d", home.Code)
+	}
+	if home.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("cache")
+	}
+	body := home.Body.String()
+	tokensAt := strings.Index(body, "/assets/tokens.css")
+	componentsAt := strings.Index(body, "/assets/components.css")
+	if tokensAt < 0 || componentsAt < 0 || tokensAt > componentsAt {
+		t.Fatal("ordem do css")
+	}
+	if !strings.Contains(body, web.ProductName) || !strings.Contains(body, ">Sair<") {
+		t.Fatal("casca")
+	}
+	if strings.Contains(body, "#") || strings.Contains(body, "rgb(") || strings.Contains(body, "<table") {
+		t.Fatal("lista ou cor")
+	}
+	marker := `name="csrf" value="`
+	start := strings.Index(body, marker)
+	if start < 0 {
+		t.Fatal("csrf")
+	}
+	rest := body[start+len(marker):]
+	end := strings.Index(rest, `"`)
+	if end < 0 || rest[:end] != csrf {
+		t.Fatal("csrf da página")
+	}
+	tokens, err := web.Stylesheet("tokens.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset := h.call(http.MethodGet, "/assets/tokens.css", nil, nil)
+	if asset.Code != http.StatusOK || asset.Body.String() != string(tokens) {
+		t.Fatal("tokens")
+	}
+	if !strings.Contains(asset.Header().Get("Content-Type"), "text/css") {
+		t.Fatal("tipo")
+	}
+	missing := h.call(http.MethodGet, "/assets/outro.css", nil, nil)
+	mustCode(t, missing, statusNotFound, codeNotFound)
+	header := cookieHeader(cookie)
+	header.Set("Content-Type", "application/x-www-form-urlencoded")
+	left := h.call(http.MethodPost, "/acesso/sair", []byte("csrf="+url.QueryEscape(csrf)), header)
+	if left.Code != http.StatusOK || count(t, h.store, `SELECT COUNT(*) FROM sessions`) != 0 {
+		t.Fatal("sair")
+	}
+	after := h.call(http.MethodGet, "/", nil, cookieHeader(cookie))
+	mustCode(t, after, statusUnauthorized, codeUnauthorized)
 }
 
 func TestDeviceTokenCannotOpenHome(t *testing.T) {

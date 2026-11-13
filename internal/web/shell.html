@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Name}}</title>
+<link rel="stylesheet" href="/assets/tokens.css">
+<link rel="stylesheet" href="/assets/components.css">
+</head>
+<body>
+<main class="shell">
+<header class="banner">
+<span class="mark" aria-hidden="true"></span>
+<h1 class="title">{{.Name}}</h1>
+<form method="post" action="/acesso/sair">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button class="button-secondary" type="submit">Sair</button>
+</form>
+</header>
+</main>
+</body>
+</html>

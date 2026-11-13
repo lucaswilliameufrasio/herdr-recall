@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"herdr-recall/internal/contract"
+	"herdr-recall/internal/web"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -48,7 +49,7 @@ type Options struct {
 	TLS        bool
 }
 
-// Server is the first listener. It does not render the desk.
+// Server is the listener. Home is the shell, not the desk.
 type Server struct {
 	store      *Store
 	nowFn      func() time.Time
@@ -130,6 +131,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /acesso/entrar", s.loginGet)
 	mux.HandleFunc("POST /acesso/entrar", s.loginPost)
 	mux.HandleFunc("POST /acesso/sair", s.logout)
+	mux.HandleFunc("GET /assets/{name}", s.asset)
 	mux.HandleFunc("GET /", s.home)
 	mux.HandleFunc("POST /maquinas/codigo", s.createCode)
 	mux.HandleFunc("GET /maquinas/{id}", s.machine)
@@ -254,13 +256,32 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) home(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := s.operator(w, r); !ok {
+func (s *Server) asset(w http.ResponseWriter, r *http.Request) {
+	body, err := web.Stylesheet(r.PathValue("name"))
+	if err != nil {
+		writeError(w, statusNotFound, codeNotFound, nil)
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.WriteString(w, "ok")
+	_, _ = w.Write(body)
+}
+
+func (s *Server) home(w http.ResponseWriter, r *http.Request) {
+	_, csrf, ok := s.operator(w, r)
+	if !ok {
+		return
+	}
+	var buf bytes.Buffer
+	if err := web.RenderShell(&buf, csrf); err != nil {
+		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (s *Server) createCode(w http.ResponseWriter, r *http.Request) {
