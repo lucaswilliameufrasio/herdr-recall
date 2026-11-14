@@ -49,7 +49,7 @@ func TestCaptureKeepsRestoreFieldsAndDropsTheRest(t *testing.T) {
 		}
 		return "0123456789abcdef", nil
 	}
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -118,7 +118,7 @@ func TestCaptureKeepsRestoreFieldsAndDropsTheRest(t *testing.T) {
 		t.Fatal(err)
 	}
 	opt.Now = when.Add(time.Minute)
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 	if ids != 1 {
@@ -140,8 +140,9 @@ func TestCaptureKeepsRestoreFieldsAndDropsTheRest(t *testing.T) {
 	opt.Herdr = func(context.Context) ([]byte, error) {
 		return nil, errors.New("herdr parado")
 	}
-	if err := Capture(context.Background(), opt); err != nil {
-		t.Fatal(err)
+	failed, err := Capture(context.Background(), opt)
+	if err != nil || failed.HerdrOK {
+		t.Fatalf("falha do Herdr pareceu captura: %v %+v", err, failed)
 	}
 	if string(mustRead(t, filepath.Join(dir, "latest.json"))) != string(raw) {
 		t.Fatal("falha do Herdr zerou latest.json")
@@ -163,7 +164,7 @@ func TestEmptyDeskIsAnArray(t *testing.T) {
 	dir := t.TempDir()
 	opt := testOptions(dir, []byte(emptyHerdr()), time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC))
 	opt.NewID = func() (string, error) { return "0123456789abcdef", nil }
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 	raw := string(mustRead(t, filepath.Join(dir, "latest.json")))
@@ -175,7 +176,7 @@ func TestEmptyDeskIsAnArray(t *testing.T) {
 		return []byte(strings.Replace(emptyHerdr(), `"panes":[]`, `"panes":null`, 1)), nil
 	}
 	opt.Now = opt.Now.Add(time.Minute)
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 	if string(mustRead(t, filepath.Join(dir, "latest.json"))) != raw {
@@ -188,7 +189,7 @@ func TestDuplicateSessionIsLowConfidence(t *testing.T) {
 	raw := herdrRaw(strings.Replace(sessionPane, `"pane_id":"p1"`, `"pane_id":"p1"`, 1) + "," + strings.Replace(sessionPane, `"pane_id":"p1"`, `"pane_id":"p2"`, 1))
 	opt := testOptions(dir, raw, time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC))
 	opt.NewID = func() (string, error) { return "0123456789abcdef", nil }
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 	latest := readLatest(t, dir)
@@ -211,7 +212,7 @@ func TestLongLabelIsClipped(t *testing.T) {
 	raw := herdrRaw(strings.Replace(pathPane, `"label":"outro"`, `"label":"`+label+`"`, 1))
 	opt := testOptions(dir, raw, time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC))
 	opt.NewID = func() (string, error) { return "0123456789abcdef", nil }
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 	latest := readLatest(t, dir)
@@ -233,7 +234,7 @@ func TestLinuxDirSyncFailureKeepsTheSnapshotID(t *testing.T) {
 		}
 		return "0123456789abcdef", nil
 	}
-	if err := Capture(context.Background(), opt); err == nil {
+	if _, err := Capture(context.Background(), opt); err == nil {
 		t.Fatal("o linux aceitou o sync recusado")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "latest.json")); !errors.Is(err, os.ErrNotExist) {
@@ -244,7 +245,7 @@ func TestLinuxDirSyncFailureKeepsTheSnapshotID(t *testing.T) {
 	}
 	opt.DirSync = nil
 	opt.Now = opt.Now.Add(time.Minute)
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
@@ -262,7 +263,7 @@ func TestDarwinDirSyncFailureWritesAWarning(t *testing.T) {
 	opt.GOOS = "darwin"
 	opt.DirSync = func(string) error { return errors.New("recusado") }
 	opt.NewID = func() (string, error) { return "0123456789abcdef", nil }
-	if err := Capture(context.Background(), opt); err != nil {
+	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}
 	warn := mustRead(t, filepath.Join(dir, "dirsync-warn"))

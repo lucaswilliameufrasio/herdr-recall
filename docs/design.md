@@ -128,9 +128,11 @@ Arquivos, modo 0600, diretórios 0700:
 
 `herdr-recall setup` pergunta, no terminal, a URL, o código e o nome da máquina. Grava `agent.json` e o arquivo de token. `herdr-recall enroll --api URL --code CODIGO --name NOME` faz o mesmo sem pergunta, no formato de `internal/agent/agent.go` (`Enroll` faz `POST /v1/devices` com `code` e `name`). Se a URL mudou e já existe token, os dois comandos exigem um código novo e substituem o token. A fila local não é apagada. Se a unidade já estiver instalada, o fim do comando avisa que ela segue com a configuração antiga até `herdr-recall service install`. A mesma regra está no ADR 0032.
 
+`herdr-recall capture` faz uma volta de captura e para. Grava `latest.json` com a árvore de divisão, ainda sem HTTP e sem loop. Se o Herdr não responde, o arquivo anterior fica e o comando diz isso. O log leva a contagem de panes e de divisões, sem argv, sessão nem cwd.
+
 `herdr-recall latest` imprime a tabela local sem falar com o servidor. Colunas, nesta ordem: workspace, aba, pane, diretório, harness, sessão, confiança, comando. Confiança sai como “alta” ou “baixa”, nunca `high`/`low`. Sessão vazia e comando vazio saem como “—”. O comando é a mesma linha com aspas simples que o botão Restaurar copia. Essa linha vai para a stdout porque a pessoa pediu a tabela. Log do processo, journal e arquivo de log do launchd não recebem argv, sessão nem cwd.
 
-`herdr-recall restore --session NOME` lê `latest.json` e monta essa mesa numa sessão nomeada que ainda não tem workspace. Recusa o nome `default`. Se a sessão já tem workspace, para e diz que nada foi executado. `--plan` só lê o snapshot e escreve o plano; a última linha é “Nada foi executado.” Sem `--plan`, cria o workspace, a aba e os `pane split` com a direção e a proporção gravadas, e chama `agent start` só quando a confiança é alta, não há ambiguidade e o argv está na allowlist. O zoom, quando a captura marcou a aba, vai para a primeira folha da divisão. O log desse comando também não leva argv, sessão nem cwd. O painel e o servidor não chamam este comando.
+`herdr-recall restore --session NOME` lê `latest.json` e monta essa mesa numa sessão nomeada que ainda não tem workspace. A sessão precisa já estar aberta; o comando não liga o servidor do Herdr. Recusa o nome `default`. Se a sessão já tem workspace, para e diz que nada foi executado. `--plan` só lê o snapshot e escreve o plano; a última linha é “Nada foi executado.” Sem `--plan`, cria o workspace, a aba e os `pane split` com a direção e a proporção gravadas, e chama `agent start` só quando a confiança é alta, não há ambiguidade e o argv está na allowlist. O zoom, quando a captura marcou a aba, vai para a primeira folha da divisão. O log desse comando também não leva argv, sessão nem cwd. O painel e o servidor não chamam este comando.
 
 Serviço, mesma forma do ADR 0032 e de `internal/service/service.go`:
 
@@ -1007,7 +1009,7 @@ Decisões tomadas aqui, para não voltarem como lacuna, estão em Key Decisions.
 
 ## PR Plan
 
-Os PRs 1–8 estão no main. O recorte aceito em seguida é a restauração local, antes da lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O loop de 60 s continua por último. Não há `match.go` no v1.
+Os PRs 1–8 estão no main. A restauração local e a captura avulsa entram antes da lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O loop de 60 s continua por último. Não há `match.go` no v1.
 
 Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem fixtures do registro do Claude, do Grok e do OpenCode, um fixture Linux de `/proc/<pid>` e um procedimento de macOS que não use `/proc`. Se esse PR chamar `pane.process_info`, tem de dizer como `argv` e `cmdline` são descartados.
 
@@ -1056,6 +1058,12 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
 - Arquivos: `internal/contract/payload.go`, `internal/agent/layout.go`, `internal/agent/restore.go`, `cmd/agent/restore.go` e os testes.
 - Depende de: PR 3.
 - A captura guarda a árvore de divisão, sem retângulo, scroll nem título. `herdr-recall restore --session NOME` exige uma sessão vazia e diferente de `default`. `--plan` não cria pane. O servidor e o painel não chamam este comando.
+
+**Captura avulsa** (depois da restauração local, antes do PR 9)
+
+- Arquivos: `cmd/agent/capture.go`, `internal/agent/boot.go` e os testes.
+- Depende de: PR 3.
+- `herdr-recall capture` roda uma volta e grava `latest.json`. Sem HTTP e sem loop. Se o Herdr não responde, o arquivo anterior fica.
 
 9. **Lista de máquinas e tabela de restaurar, com fixture**
    - Arquivos: templates da lista e do detalhe, `internal/web/panel.js`, SVG da faixa.

@@ -78,7 +78,7 @@ func restoreMessage(err error) string {
 	case errors.Is(err, agent.ErrSessionOccupied):
 		return "A sessão já tem workspaces. Nada foi executado."
 	case errors.Is(err, agent.ErrHerdr):
-		return "O Herdr não respondeu nesta sessão."
+		return "O Herdr não respondeu nesta sessão. Abra ela antes, com herdr --session NOME."
 	default:
 		return "Não foi possível montar a mesa."
 	}

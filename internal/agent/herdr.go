@@ -55,11 +55,18 @@ func RunHerdrSnapshot(ctx context.Context) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
+// CaptureResult counts this turn. It has no argv, session, or directory.
+type CaptureResult struct {
+	HerdrOK bool
+	Panes   int
+	Layouts int
+}
+
 // Capture reads one Herdr snapshot, appends this turn to the spool, and syncs
 // the files. It does not open a network connection.
-func Capture(ctx context.Context, opt CaptureOptions) error {
+func Capture(ctx context.Context, opt CaptureOptions) (CaptureResult, error) {
 	if opt.StateDir == "" {
-		return errors.New("diretório de estado vazio")
+		return CaptureResult{}, errors.New("diretório de estado vazio")
 	}
 	if opt.Now.IsZero() {
 		opt.Now = time.Now()
@@ -82,11 +89,11 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 	spoolPath, latestPath := statePaths(opt.StateDir)
 	spool, err := loadSpool(spoolPath)
 	if err != nil {
-		return err
+		return CaptureResult{}, err
 	}
 	baseline, haveBaseline, err := baselineDesk(spool, latestPath)
 	if err != nil {
-		return err
+		return CaptureResult{}, err
 	}
 
 	raw, herdrErr := opt.Herdr(ctx)
@@ -100,6 +107,15 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 			layouts = parsedLayouts
 			herdrOK = true
 		}
+	}
+	finish := func(turnErr error) (CaptureResult, error) {
+		if turnErr != nil {
+			return CaptureResult{}, turnErr
+		}
+		if !herdrOK {
+			return CaptureResult{}, nil
+		}
+		return CaptureResult{HerdrOK: true, Panes: len(panes), Layouts: len(layouts)}, nil
 	}
 
 	paneCount := 0
@@ -120,10 +136,10 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 		HerdrOK:    herdrOK,
 	})
 	if err != nil {
-		return err
+		return CaptureResult{}, err
 	}
 	if _, err := contract.ValidatePresence(presenceBody); err != nil {
-		return err
+		return CaptureResult{}, err
 	}
 
 	tail := []spoolItem{{
@@ -139,13 +155,13 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 			var changedErr error
 			changed, changedErr = deskChanged(baseline.Panes, baseline.Layouts, panes, layouts)
 			if changedErr != nil {
-				return changedErr
+				return CaptureResult{}, changedErr
 			}
 		}
 		if changed {
 			id, idErr := opt.NewID()
 			if idErr != nil {
-				return idErr
+				return CaptureResult{}, idErr
 			}
 			body, marshalErr := contract.MarshalSnapshot(contract.Snapshot{
 				SnapshotID: id,
@@ -156,10 +172,10 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 				Layouts:    layouts,
 			})
 			if marshalErr != nil {
-				return marshalErr
+				return CaptureResult{}, marshalErr
 			}
 			if _, validateErr := contract.ValidateSnapshot(body); validateErr != nil {
-				return validateErr
+				return CaptureResult{}, validateErr
 			}
 			snapshotBody = body
 			tail = append(tail, spoolItem{
@@ -174,27 +190,27 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 	spool.Items = append(spool.Items, tail...)
 	if err := saveSpool(spoolPath, spool, opt.DirSync); err != nil {
 		if kept := continueAfterDirSync(err, goos, opt.StateDir, now); kept != nil {
-			return kept
+			return CaptureResult{}, kept
 		}
 	}
 	if wroteSnapshot {
-		return writeDesk(opt.StateDir, latestPath, now, snapshotBody, opt.DirSync, goos)
+		return finish(writeDesk(opt.StateDir, latestPath, now, snapshotBody, opt.DirSync, goos))
 	}
 	if !herdrOK {
-		return nil
+		return finish(nil)
 	}
 	body, ok, err := matchingSnapshotBody(spool, panes, layouts)
 	if err != nil || !ok {
-		return err
+		return finish(err)
 	}
 	current, readErr := os.ReadFile(latestPath)
 	if readErr == nil && bytes.Equal(current, body) {
-		return backfillHistory(opt.StateDir, now, body, opt.DirSync, goos)
+		return finish(backfillHistory(opt.StateDir, now, body, opt.DirSync, goos))
 	}
 	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-		return readErr
+		return finish(readErr)
 	}
-	return writeDesk(opt.StateDir, latestPath, now, body, opt.DirSync, goos)
+	return finish(writeDesk(opt.StateDir, latestPath, now, body, opt.DirSync, goos))
 }
 
 func backfillHistory(stateDir string, now time.Time, body []byte, dirSync func(string) error, goos string) error {

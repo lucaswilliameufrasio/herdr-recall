@@ -78,6 +78,26 @@ func dispatch(args []string, in io.Reader, out, errW io.Writer, home string, hom
 		}
 		fmt.Fprintln(errW, enrollMessage(err))
 		return 1
+	case "capture":
+		if homeErr != nil {
+			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
+			return 1
+		}
+		bootID, bootErr := agent.CurrentBootID()
+		if bootErr != nil {
+			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
+			return 1
+		}
+		host, hostErr := agent.CurrentHost()
+		if hostErr != nil {
+			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
+			return 1
+		}
+		return captureCommand(args[1:], out, errW, agent.CaptureOptions{
+			StateDir: filepath.Join(home, ".local", "state", "herdr-recall"),
+			Host:     host,
+			BootID:   bootID,
+		})
 	case "restore":
 		if homeErr != nil {
 			fmt.Fprintln(errW, "Não foi possível montar a mesa.")
