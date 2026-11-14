@@ -83,21 +83,46 @@ func dispatch(args []string, in io.Reader, out, errW io.Writer, home string, hom
 			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
 			return 1
 		}
-		bootID, bootErr := agent.CurrentBootID()
-		if bootErr != nil {
+		opt, err := deskOptions(home)
+		if err != nil {
 			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
 			return 1
 		}
-		host, hostErr := agent.CurrentHost()
-		if hostErr != nil {
+		return captureCommand(args[1:], out, errW, opt)
+	case "run":
+		if len(args) != 1 {
+			fmt.Fprintln(errW, "uso: herdr-recall run")
+			return 2
+		}
+		if homeErr != nil {
 			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
 			return 1
 		}
-		return captureCommand(args[1:], out, errW, agent.CaptureOptions{
-			StateDir: filepath.Join(home, ".local", "state", "herdr-recall"),
-			Host:     host,
-			BootID:   bootID,
-		})
+		opt, err := deskOptions(home)
+		if err != nil {
+			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
+			return 1
+		}
+		return runCommand(nil, errW, opt)
+	case "service":
+		if homeErr != nil {
+			fmt.Fprintln(errW, "Não foi possível operar o serviço.")
+			return 1
+		}
+		if goos == "windows" {
+			fmt.Fprintln(errW, "O Windows não tem serviço neste corte.")
+			return 1
+		}
+		if len(args) < 2 {
+			fmt.Fprintln(errW, "uso: herdr-recall service install [--dry-run] | uninstall | doctor")
+			return 2
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			fmt.Fprintln(errW, "Não foi possível operar o serviço.")
+			return 1
+		}
+		return serviceCommand(args[1:], out, errW, agent.NewManager(goos, home, exe, os.Getenv("USER"), os.Getuid()))
 	case "restore":
 		if homeErr != nil {
 			fmt.Fprintln(errW, "Não foi possível montar a mesa.")

@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"herdr-recall/internal/agent"
 )
@@ -27,16 +29,30 @@ func captureCommand(args []string, out, errW io.Writer, opt agent.CaptureOptions
 		return 1
 	}
 	result, err := agent.Capture(context.Background(), opt)
-	if err != nil {
-		fmt.Fprintln(errW, "Não foi possível gravar a captura.")
-		return 1
-	}
-	if !result.HerdrOK {
-		fmt.Fprintln(errW, "O Herdr não respondeu. A última captura continua aqui.")
-		fmt.Fprintln(errW, "capture panes=0")
+	if err != nil || !result.HerdrOK {
+		agent.LogCapture(errW, result, err)
 		return 1
 	}
 	fmt.Fprintln(out, "Captura gravada.")
-	fmt.Fprintf(errW, "capture panes=%d layouts=%d\n", result.Panes, result.Layouts)
+	agent.LogCapture(errW, result, nil)
 	return 0
+}
+
+func deskOptions(home string) (agent.CaptureOptions, error) {
+	bootID, err := agent.CurrentBootID()
+	if err != nil {
+		return agent.CaptureOptions{}, err
+	}
+	host, err := agent.CurrentHost()
+	if err != nil {
+		return agent.CaptureOptions{}, err
+	}
+	if bootID == "" || host == "" {
+		return agent.CaptureOptions{}, errors.New("identidade vazia")
+	}
+	return agent.CaptureOptions{
+		StateDir: filepath.Join(home, ".local", "state", "herdr-recall"),
+		Host:     host,
+		BootID:   bootID,
+	}, nil
 }

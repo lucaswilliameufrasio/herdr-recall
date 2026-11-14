@@ -128,7 +128,9 @@ Arquivos, modo 0600, diretórios 0700:
 
 `herdr-recall setup` pergunta, no terminal, a URL, o código e o nome da máquina. Grava `agent.json` e o arquivo de token. `herdr-recall enroll --api URL --code CODIGO --name NOME` faz o mesmo sem pergunta, no formato de `internal/agent/agent.go` (`Enroll` faz `POST /v1/devices` com `code` e `name`). Se a URL mudou e já existe token, os dois comandos exigem um código novo e substituem o token. A fila local não é apagada. Se a unidade já estiver instalada, o fim do comando avisa que ela segue com a configuração antiga até `herdr-recall service install`. A mesma regra está no ADR 0032.
 
-`herdr-recall capture` faz uma volta de captura e para. Grava `latest.json` com a árvore de divisão, ainda sem HTTP e sem loop. Se o Herdr não responde, o arquivo anterior fica e o comando diz isso. O log leva a contagem de panes e de divisões, sem argv, sessão nem cwd.
+`herdr-recall capture` faz uma volta de captura e para. Grava `latest.json` com a árvore de divisão, ainda sem HTTP. Se o Herdr não responde, o arquivo anterior fica e o comando diz isso. O log leva a contagem de panes e de divisões, sem argv, sessão nem cwd.
+
+`herdr-recall run` repete essa captura no ato e depois a cada 60 s, no relógio monotônico. Continua sem HTTP. `herdr-recall service install` grava a unidade de usuário que executa `run`. Neste corte o install não exige config nem token. `--dry-run` não grava e não chama o systemd nem o launchd. `doctor` lê a unidade, o `PATH`, o `herdr` e `dirsync-warn`. Não chama `/healthz` nem `GET /v1/device`; isso volta quando o envio existir. O linger, se estiver desligado, é aviso: o comando não liga.
 
 `herdr-recall latest` imprime a tabela local sem falar com o servidor. Colunas, nesta ordem: workspace, aba, pane, diretório, harness, sessão, confiança, comando. Confiança sai como “alta” ou “baixa”, nunca `high`/`low`. Sessão vazia e comando vazio saem como “—”. O comando é a mesma linha com aspas simples que o botão Restaurar copia. Essa linha vai para a stdout porque a pessoa pediu a tabela. Log do processo, journal e arquivo de log do launchd não recebem argv, sessão nem cwd.
 
@@ -136,7 +138,7 @@ Arquivos, modo 0600, diretórios 0700:
 
 Serviço, mesma forma do ADR 0032 e de `internal/service/service.go`:
 
-- `herdr-recall service install | uninstall | doctor`. `install` exige config e token, recusa binário temporário de `go run`, grava o caminho absoluto de `herdr-recall`. `--dry-run` só mostra. Reinstalar reescreve e reinicia. Não cria um nome `agent` no `PATH`.
+- `herdr-recall service install | uninstall | doctor`. No serviço local deste corte, `install` não exige config nem token. Recusa binário temporário de `go run` e um executável de nome `agent`, grava o caminho absoluto de `herdr-recall`. `--dry-run` só mostra. Reinstalar reescreve e reinicia. Não cria um nome `agent` no `PATH`.
 - O `PATH` da unidade é montado na hora do install, como `ServicePATH`: diretório do binário, diretório do `herdr` achado no `PATH` do shell que instala, `~/.local/bin`, `/opt/homebrew/bin` no macOS, `/usr/local/bin`, `/usr/bin`, `/bin`. Sem isso o serviço sobe com `PATH` mínimo e não acha o `herdr`.
 - Linux: `~/.config/systemd/user/herdr-recall.service`. As linhas de restart são as do tracker, não só `Restart=on-failure` (isso sozinho reinicia na saída 3):
 
@@ -150,7 +152,7 @@ RestartPreventExitStatus=3
 
 - macOS: `~/Library/LaunchAgents/dev.herdr-recall.agent.plist`, com o mesmo `PATH` em `EnvironmentVariables`. O rótulo do arquivo tem “agent” porque é o vocabulário do launchd, igual a `dev.ai-usage.agent.plist`. Não é um executável chamado `agent`. O launchd pode reiniciar depois da revogação; o `doctor` mostra o bloqueio. `RestartPreventExitStatus` não existe no launchd. Mesma consequência do ADR 0032.
 - `uninstall` tira só a unidade. Config, token, spool e histórico ficam.
-- `doctor` só lê: plataforma, config, token, binário, unidade, `PATH` gravado, se `herdr` existe nesse `PATH`, linger (avisa, não liga), `/healthz`, `GET /v1/device`, fila, itens em quarentena, e `dirsync-warn` se o arquivo existir. `herdr` ausente desse `PATH` é `fail`. `dirsync-warn` presente é `warn`, não `fail`: não entra na conta que faz a saída 1. Sai 1 se houver `fail`. Sem `fail`, a saída é 0 mesmo com esse aviso.
+- `doctor`, neste corte local, só lê: plataforma, binário, unidade, `PATH` gravado, se `herdr` existe nesse `PATH`, linger (avisa, não liga) e `dirsync-warn` se o arquivo existir. Não chama `/healthz` nem `GET /v1/device`. `herdr` ausente desse `PATH` é `fail`. `dirsync-warn` presente é `warn`, não `fail`: não entra na conta que faz a saída 1. Sai 1 se houver `fail`. Sem `fail`, a saída é 0 mesmo com esse aviso. Config, token, fila e a chamada ao servidor entram quando o envio existir.
 - Windows: mensagem de sem suporte e saída 1.
 
 Revogação: HTTP 401 com `{"error":"DEVICE_REVOKED"}`. O agente para o loop, conserva o spool, sai 3. Não pede outro token sozinho.
@@ -1009,7 +1011,7 @@ Decisões tomadas aqui, para não voltarem como lacuna, estão em Key Decisions.
 
 ## PR Plan
 
-Os PRs 1–8 estão no main. A restauração local e a captura avulsa entram antes da lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O loop de 60 s continua por último. Não há `match.go` no v1.
+Os PRs 1–8 estão no main. A restauração local, a captura avulsa e o serviço local de 60 s entram antes da lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O envio do loop continua por último. Não há `match.go` no v1.
 
 Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem fixtures do registro do Claude, do Grok e do OpenCode, um fixture Linux de `/proc/<pid>` e um procedimento de macOS que não use `/proc`. Se esse PR chamar `pane.process_info`, tem de dizer como `argv` e `cmdline` são descartados.
 
@@ -1064,6 +1066,12 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
 - Arquivos: `cmd/agent/capture.go`, `internal/agent/boot.go` e os testes.
 - Depende de: PR 3.
 - `herdr-recall capture` roda uma volta e grava `latest.json`. Sem HTTP e sem loop. Se o Herdr não responde, o arquivo anterior fica.
+
+**Serviço local de 60 s** (depois da captura avulsa, antes do PR 9)
+
+- Arquivos: `internal/agent/loop.go`, `internal/agent/service.go`, `cmd/agent/run.go`, `cmd/agent/service.go` e os testes.
+- Depende de: PR 3.
+- `herdr-recall run` grava a captura na hora e a cada 60 s. `service install` liga a unidade de usuário. Sem HTTP. `doctor` não chama o servidor. O Windows fica de fora.
 
 9. **Lista de máquinas e tabela de restaurar, com fixture**
    - Arquivos: templates da lista e do detalhe, `internal/web/panel.js`, SVG da faixa.
