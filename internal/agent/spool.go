@@ -84,7 +84,7 @@ func encodeSpool(file spoolFile) ([]byte, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
-func baselinePanes(spool spoolFile, latestPath string) ([]contract.Pane, bool, error) {
+func baselineDesk(spool spoolFile, latestPath string) (contract.Snapshot, bool, error) {
 	for i := len(spool.Items) - 1; i >= 0; i-- {
 		item := spool.Items[i]
 		if item.Kind != kindSnapshot {
@@ -92,25 +92,25 @@ func baselinePanes(spool spoolFile, latestPath string) ([]contract.Pane, bool, e
 		}
 		snap, err := contract.ValidateSnapshot(item.Body)
 		if err != nil {
-			return nil, false, err
+			return contract.Snapshot{}, false, err
 		}
-		return snap.Panes, true, nil
+		return snap, true, nil
 	}
 	raw, err := os.ReadFile(latestPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, false, nil
+		return contract.Snapshot{}, false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return contract.Snapshot{}, false, err
 	}
 	snap, err := contract.ValidateSnapshot(raw)
 	if err != nil {
-		return nil, false, err
+		return contract.Snapshot{}, false, err
 	}
-	return snap.Panes, true, nil
+	return snap, true, nil
 }
 
-func matchingSnapshotBody(spool spoolFile, panes []contract.Pane) ([]byte, bool, error) {
+func matchingSnapshotBody(spool spoolFile, panes []contract.Pane, layouts []contract.Layout) ([]byte, bool, error) {
 	for i := len(spool.Items) - 1; i >= 0; i-- {
 		item := spool.Items[i]
 		if item.Kind != kindSnapshot {
@@ -120,7 +120,7 @@ func matchingSnapshotBody(spool spoolFile, panes []contract.Pane) ([]byte, bool,
 		if err != nil {
 			return nil, false, err
 		}
-		changed, err := deskChanged(snap.Panes, panes)
+		changed, err := deskChanged(snap.Panes, snap.Layouts, panes, layouts)
 		if err != nil {
 			return nil, false, err
 		}

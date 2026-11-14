@@ -5,3 +5,5 @@ Produto irmão do [ai-usage-tracker](https://github.com/lucaswilliameufrasio/ai-
 O desenho aceito está em [docs/design.md](docs/design.md). O nome é provisório.
 
 O servidor escuta em `127.0.0.1:8788`. O executável do agente é `herdr-recall`. O do servidor é `herdr-recall-server`. Nenhum dos dois se instala com o nome `agent`.
+
+`herdr-recall restore --session NOME` monta a última captura numa sessão nomeada que ainda não tem workspace. `default` fica como está. `--plan` só mostra o que seria feito.

@@ -82,6 +82,58 @@ func TestHashIgnoresSnapshotIDAndIncludesTime(t *testing.T) {
 	}
 }
 
+func TestLayoutRoundTripCoversEveryPane(t *testing.T) {
+	snap := validSnapshot()
+	snap.Layouts = []Layout{{
+		WorkspaceID:     "w1",
+		TabID:           "t1",
+		WorkspaceNumber: 1,
+		TabNumber:       1,
+		Root:            &Node{Type: NodePane, PaneID: "p1"},
+	}}
+	raw, err := MarshalSnapshot(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"layouts":`) || strings.Contains(string(raw), `"rect"`) {
+		t.Fatalf("divisão: %s", raw)
+	}
+	back, err := ValidateSnapshot(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back.Layouts) != 1 || back.Layouts[0].Root.PaneID != "p1" {
+		t.Fatalf("volta: %+v", back.Layouts)
+	}
+	without := validSnapshot()
+	plain, err := MarshalSnapshot(without)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plain), "layouts") {
+		t.Fatalf("mesa antiga ganhou divisão: %s", plain)
+	}
+	left, err := SemanticHash(without)
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := SemanticHash(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left == right {
+		t.Fatal("a divisão não entrou no hash")
+	}
+	snap.Layouts[0].Root = &Node{Type: NodePane, PaneID: "missing"}
+	broken, err := MarshalSnapshot(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateSnapshot(broken); err == nil {
+		t.Fatal("pane fora da divisão passou")
+	}
+}
+
 func TestCwdPassesAndForbiddenKeysFail(t *testing.T) {
 	body := `{
 		"snapshot_id":"0123456789abcdef",

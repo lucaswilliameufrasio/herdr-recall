@@ -34,7 +34,7 @@ type CaptureOptions struct {
 	GOOS     string
 }
 
-// HerdrArgv is the only Herdr command this agent runs.
+// HerdrArgv is the only Herdr command the capture runs.
 func HerdrArgv() []string {
 	return []string{"herdr", "api", "snapshot"}
 }
@@ -84,7 +84,7 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 	if err != nil {
 		return err
 	}
-	baseline, haveBaseline, err := baselinePanes(spool, latestPath)
+	baseline, haveBaseline, err := baselineDesk(spool, latestPath)
 	if err != nil {
 		return err
 	}
@@ -92,10 +92,12 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 	raw, herdrErr := opt.Herdr(ctx)
 	panes := []contract.Pane{}
 	herdrOK := false
+	var layouts []contract.Layout
 	if herdrErr == nil {
-		parsed, parseErr := ParseSnapshot(raw)
+		parsed, parsedLayouts, parseErr := ParseSnapshot(raw)
 		if parseErr == nil {
 			panes = parsed
+			layouts = parsedLayouts
 			herdrOK = true
 		}
 	}
@@ -104,7 +106,7 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 	if herdrOK {
 		paneCount = len(panes)
 	} else if haveBaseline {
-		paneCount = len(baseline)
+		paneCount = len(baseline.Panes)
 	}
 	if paneCount > 128 {
 		paneCount = 128
@@ -135,7 +137,7 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 		changed := !haveBaseline
 		if haveBaseline {
 			var changedErr error
-			changed, changedErr = deskChanged(baseline, panes)
+			changed, changedErr = deskChanged(baseline.Panes, baseline.Layouts, panes, layouts)
 			if changedErr != nil {
 				return changedErr
 			}
@@ -151,6 +153,7 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 				BootID:     opt.BootID,
 				CapturedAt: observed,
 				Panes:      panes,
+				Layouts:    layouts,
 			})
 			if marshalErr != nil {
 				return marshalErr
@@ -180,7 +183,7 @@ func Capture(ctx context.Context, opt CaptureOptions) error {
 	if !herdrOK {
 		return nil
 	}
-	body, ok, err := matchingSnapshotBody(spool, panes)
+	body, ok, err := matchingSnapshotBody(spool, panes, layouts)
 	if err != nil || !ok {
 		return err
 	}
@@ -251,18 +254,19 @@ func continueAfterDirSync(err error, goos, stateDir string, now time.Time) error
 	return nil
 }
 
-// ParseSnapshot keeps the pane cwd and a kind=id session. Every other Herdr field is dropped.
-func ParseSnapshot(raw []byte) ([]contract.Pane, error) {
+// ParseSnapshot keeps the pane cwd, a kind=id session, and the split tree.
+// Rectangles, scrollback, titles, and every other Herdr field are dropped.
+func ParseSnapshot(raw []byte) ([]contract.Pane, []contract.Layout, error) {
 	var envelope herdrEnvelope
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	snap := envelope.Result.Snapshot
 	if snap.Panes == nil || snap.Workspaces == nil || snap.Tabs == nil {
-		return nil, errors.New("mesa ausente")
+		return nil, nil, errors.New("mesa ausente")
 	}
 	if len(snap.Panes) > 128 {
-		return nil, errors.New("mesa grande demais")
+		return nil, nil, errors.New("mesa grande demais")
 	}
 	workspaces := map[string]string{}
 	for _, workspace := range snap.Workspaces {
@@ -276,10 +280,10 @@ func ParseSnapshot(raw []byte) ([]contract.Pane, error) {
 	seen := map[string]struct{}{}
 	for _, pane := range snap.Panes {
 		if pane.PaneID == "" || pane.WorkspaceID == "" || pane.TabID == "" {
-			return nil, errors.New("pane sem id")
+			return nil, nil, errors.New("pane sem id")
 		}
 		if _, ok := seen[pane.PaneID]; ok {
-			return nil, errors.New("pane repetido")
+			return nil, nil, errors.New("pane repetido")
 		}
 		seen[pane.PaneID] = struct{}{}
 		cwd := ""
@@ -301,7 +305,11 @@ func ParseSnapshot(raw []byte) ([]contract.Pane, error) {
 		panes = append(panes, built)
 	}
 	markAmbiguity(panes)
-	return panes, nil
+	layouts, err := buildLayouts(snap)
+	if err != nil {
+		return nil, nil, err
+	}
+	return panes, layouts, nil
 }
 
 func applySession(pane *contract.Pane, session *herdrSession) {
@@ -390,25 +398,26 @@ func newSnapshotID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func deskChanged(left, right []contract.Pane) (bool, error) {
-	leftHash, err := deskHash(left)
+func deskChanged(leftPanes []contract.Pane, leftLayouts []contract.Layout, rightPanes []contract.Pane, rightLayouts []contract.Layout) (bool, error) {
+	leftHash, err := deskHash(leftPanes, leftLayouts)
 	if err != nil {
 		return false, err
 	}
-	rightHash, err := deskHash(right)
+	rightHash, err := deskHash(rightPanes, rightLayouts)
 	if err != nil {
 		return false, err
 	}
 	return leftHash != rightHash, nil
 }
 
-func deskHash(panes []contract.Pane) (string, error) {
+func deskHash(panes []contract.Pane, layouts []contract.Layout) (string, error) {
 	return contract.SemanticHash(contract.Snapshot{
 		SnapshotID: strings.Repeat("a", 16),
 		Host:       "desk",
 		BootID:     "boot",
 		CapturedAt: "2026-11-13T00:00:00.000000000Z",
 		Panes:      panes,
+		Layouts:    layouts,
 	})
 }
 
@@ -422,16 +431,51 @@ type herdrSnapshot struct {
 	Workspaces []herdrWorkspace `json:"workspaces"`
 	Tabs       []herdrTab       `json:"tabs"`
 	Panes      []herdrPane      `json:"panes"`
+	Layouts    []herdrLayout    `json:"layouts"`
 }
 
 type herdrWorkspace struct {
-	ID    string `json:"workspace_id"`
-	Label string `json:"label"`
+	ID     string `json:"workspace_id"`
+	Label  string `json:"label"`
+	Number int    `json:"number"`
 }
 
 type herdrTab struct {
-	ID    string `json:"tab_id"`
-	Label string `json:"label"`
+	ID          string `json:"tab_id"`
+	WorkspaceID string `json:"workspace_id"`
+	Label       string `json:"label"`
+	Number      int    `json:"number"`
+}
+
+type herdrLayout struct {
+	WorkspaceID string             `json:"workspace_id"`
+	TabID       string             `json:"tab_id"`
+	Zoomed      bool               `json:"zoomed"`
+	Area        herdrRect          `json:"area"`
+	Panes       []herdrLayoutPane  `json:"panes"`
+	Splits      []herdrLayoutSplit `json:"splits"`
+}
+
+type herdrLayoutPane struct {
+	PaneID string    `json:"pane_id"`
+	Rect   herdrRect `json:"rect"`
+}
+
+type herdrLayoutSplit struct {
+	Direction string    `json:"direction"`
+	Ratio     float64   `json:"ratio"`
+	Rect      herdrRect `json:"rect"`
+}
+
+type herdrRect struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+func (r herdrRect) toRect() cellRect {
+	return cellRect{X: r.X, Y: r.Y, Width: r.Width, Height: r.Height}
 }
 
 type herdrPane struct {

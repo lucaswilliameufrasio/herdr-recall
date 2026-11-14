@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -23,6 +24,10 @@ const (
 	HarnessClaude          = "claude"
 	HarnessGrok            = "grok"
 	HarnessOpenCode        = "opencode"
+	NodePane               = "pane"
+	NodeSplit              = "split"
+	SplitRight             = "right"
+	SplitDown              = "down"
 	maxPanes               = 128
 	maxLabelRunes          = 80
 	maxIDRunes             = 80
@@ -48,12 +53,33 @@ type Pane struct {
 	AmbiguousWith  []string `json:"ambiguous_with,omitempty"`
 }
 
+// Layout is one tab's split tree. Rectangles, scrollback, and titles stay out.
+type Layout struct {
+	WorkspaceID     string `json:"workspace_id"`
+	TabID           string `json:"tab_id"`
+	WorkspaceNumber int    `json:"workspace_number"`
+	TabNumber       int    `json:"tab_number"`
+	Zoomed          bool   `json:"zoomed,omitempty"`
+	Root            *Node  `json:"root"`
+}
+
+// Node is either a pane leaf or a binary split. First is the original side.
+type Node struct {
+	Type      string  `json:"type"`
+	PaneID    string  `json:"pane_id,omitempty"`
+	Direction string  `json:"direction,omitempty"`
+	Ratio     float64 `json:"ratio,omitempty"`
+	First     *Node   `json:"first,omitempty"`
+	Second    *Node   `json:"second,omitempty"`
+}
+
 type Snapshot struct {
-	SnapshotID string `json:"snapshot_id"`
-	Host       string `json:"host"`
-	BootID     string `json:"boot_id"`
-	CapturedAt string `json:"captured_at"`
-	Panes      []Pane `json:"panes"`
+	SnapshotID string   `json:"snapshot_id"`
+	Host       string   `json:"host"`
+	BootID     string   `json:"boot_id"`
+	CapturedAt string   `json:"captured_at"`
+	Panes      []Pane   `json:"panes"`
+	Layouts    []Layout `json:"layouts,omitempty"`
 }
 
 type Presence struct {
@@ -64,10 +90,11 @@ type Presence struct {
 }
 
 type semantic struct {
-	BootID     string `json:"boot_id"`
-	CapturedAt string `json:"captured_at"`
-	Host       string `json:"host"`
-	Panes      []Pane `json:"panes"`
+	BootID     string   `json:"boot_id"`
+	CapturedAt string   `json:"captured_at"`
+	Host       string   `json:"host"`
+	Panes      []Pane   `json:"panes"`
+	Layouts    []Layout `json:"layouts,omitempty"`
 }
 
 type FieldError struct {
@@ -156,6 +183,7 @@ func SemanticHash(snap Snapshot) (string, error) {
 		CapturedAt: normalized.CapturedAt,
 		Host:       normalized.Host,
 		Panes:      normalized.Panes,
+		Layouts:    normalized.Layouts,
 	}
 	raw, err := encode(body)
 	if err != nil {
@@ -216,6 +244,24 @@ func normalize(snap Snapshot) Snapshot {
 		return strings.Compare(left.PaneID, right.PaneID)
 	})
 	snap.Panes = panes
+	if len(snap.Layouts) == 0 {
+		snap.Layouts = nil
+		return snap
+	}
+	layouts := append([]Layout{}, snap.Layouts...)
+	slices.SortFunc(layouts, func(left Layout, right Layout) int {
+		if left.WorkspaceNumber != right.WorkspaceNumber {
+			return left.WorkspaceNumber - right.WorkspaceNumber
+		}
+		if left.TabNumber != right.TabNumber {
+			return left.TabNumber - right.TabNumber
+		}
+		if cmp := strings.Compare(left.WorkspaceID, right.WorkspaceID); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(left.TabID, right.TabID)
+	})
+	snap.Layouts = layouts
 	return snap
 }
 
@@ -264,7 +310,79 @@ func checkSnapshot(snap Snapshot) error {
 			return fieldError("confidence", "sessão repetida é baixa")
 		}
 	}
+	return checkLayouts(snap)
+}
+
+func checkLayouts(snap Snapshot) error {
+	if len(snap.Layouts) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	for _, layout := range snap.Layouts {
+		if !idOK(layout.WorkspaceID) || !idOK(layout.TabID) {
+			return fieldError("layouts", "id inválido")
+		}
+		if layout.WorkspaceNumber < 0 || layout.TabNumber < 0 {
+			return fieldError("layouts", "número inválido")
+		}
+		if layout.Root == nil {
+			return fieldError("layouts", "divisão vazia")
+		}
+		if err := checkNode(layout, layout.Root, snap, seen, 0); err != nil {
+			return err
+		}
+	}
+	if len(seen) != len(snap.Panes) {
+		return fieldError("layouts", "a divisão não cobre a mesa")
+	}
 	return nil
+}
+
+func checkNode(layout Layout, node *Node, snap Snapshot, seen map[string]struct{}, depth int) error {
+	if node == nil || depth > maxPanes {
+		return fieldError("layouts", "divisão funda")
+	}
+	switch node.Type {
+	case NodePane:
+		if node.First != nil || node.Second != nil || node.Direction != "" || node.Ratio != 0 || node.PaneID == "" {
+			return fieldError("layouts", "pane com divisão")
+		}
+		var found *Pane
+		for i := range snap.Panes {
+			if snap.Panes[i].PaneID == node.PaneID {
+				found = &snap.Panes[i]
+				break
+			}
+		}
+		if found == nil || found.WorkspaceID != layout.WorkspaceID || found.TabID != layout.TabID {
+			return fieldError("layouts", "pane fora da aba")
+		}
+		if _, dup := seen[node.PaneID]; dup {
+			return fieldError("layouts", "pane repetido na divisão")
+		}
+		seen[node.PaneID] = struct{}{}
+		return nil
+	case NodeSplit:
+		if node.PaneID != "" || (node.Direction != SplitRight && node.Direction != SplitDown) || !ratioOK(node.Ratio) {
+			return fieldError("layouts", "proporção inválida")
+		}
+		if node.First == nil || node.Second == nil {
+			return fieldError("layouts", "divisão incompleta")
+		}
+		if err := checkNode(layout, node.First, snap, seen, depth+1); err != nil {
+			return err
+		}
+		return checkNode(layout, node.Second, snap, seen, depth+1)
+	default:
+		return fieldError("layouts", "nó inválido")
+	}
+}
+
+func ratioOK(value float64) bool {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return false
+	}
+	return value > 0 && value < 1
 }
 
 func checkPane(pane Pane) error {

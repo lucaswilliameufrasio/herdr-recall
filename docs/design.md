@@ -43,7 +43,7 @@ O Herdr, nesta máquina, em 2026-11-12, expõe `herdr api snapshot` e `herdr api
 - Serviço de usuário, sem root, no formato do ADR 0032. Windows sem suporte.
 - Captura local a cada 60 s, com fsync do arquivo e do diretório, antes de qualquer HTTP. Envio da mesa quando o conjunto de panes muda, mais retentativa da fila em ordem FIFO. Itens de um boot anterior saem na rede antes dos itens do boot novo, e essa espera não bloqueia a gravação local.
 - O servidor guarda a última captura por `(dispositivo, boot_id)`. Depois de uma queda, o painel abre no boot anterior, que ainda tem os ids. O boot novo mostra as shells restauradas quando a captura dele chega.
-- O painel copia o argv. O servidor nunca reabre pane.
+- O painel copia o argv. O servidor nunca reabre pane. A pessoa pode montar a mesa numa sessão nomeada vazia com `herdr-recall restore --session NOME`.
 - Histórico minuto a minuto fica na máquina por 48 h (dentro da faixa de 1–2 dias já aceita). O servidor não guarda cada minuto.
 - CLI local imprime a última tabela quando o servidor está fora.
 - Um operador por instalação. Setup uma vez. Cookie para ver o painel. Código de enrolamento para o agente. O token de dispositivo só ingere.
@@ -55,7 +55,7 @@ O Herdr, nesta máquina, em 2026-11-12, expõe `herdr api snapshot` e `herdr api
 - React, Vite, TypeScript, PWA, biblioteca de gráfico, biblioteca de CSS, webfont.
 - Login por GitHub, Gitea, Google ou Apple. Cofre. Web Push. Replicação SQLite. Vários operadores.
 - **E-mail no v1.** Não há trabalho de e-mail no escopo aceito: o setup é local, o código de enrolamento aparece no painel, não há alerta nem convite. O tracker envia o e-mail da instalação por Resend, MillionSend, Cloudflare Email ou Amazon SES (`README.md`). O Sabiá é um caminho a mais nesta instalação do tracker, não o único provedor e não uma dependência do produto público. Se um dia este produto ganhar e-mail, esse conjunto de quatro provedores é a referência; não um caminho só pelo Sabiá. Isso não entra no v1 e não fica como pergunta aberta.
-- Executar o argv, restaurar pane sozinho, notificação, som, badge, “lembrar depois”.
+- O painel e o servidor executarem o argv ou reabrirem pane. Notificação, som, badge e “lembrar depois”.
 - Windows. Root. Linger ligado pelo `install`.
 - Gráfico de uso, série de vaidade, histórico de cada minuto no servidor, apagar remoto das capturas já aceitas (wipe). Revogar para o agente; a última mesa continua no servidor até alguém apagar o arquivo do banco.
 - Tema escuro no v1. O arquivo de tokens deixa o gancho; não se entrega o bloco.
@@ -86,7 +86,7 @@ flowchart LR
   operator[Operador no navegador] -->|cookie| http
 ```
 
-Frota pessoal: até 10 máquinas. Captura local a cada 60 s. Payload nosso, depois de cortar scroll, tokens, layouts e títulos: teto de 128 panes e 256 KiB. Uma mesa típica de 30 panes fica em torno de 15 KB. Pior caso, se as 10 máquinas mudarem a mesa todo minuto: cerca de 216 MB/dia na rede, e o servidor substitui a linha do boot só quando `captured_at` é maior, em vez de acumular cada minuto. Em uso quieto o envio da mesa é raro; o que segue a cada minuto é a presença, cerca de 200 B. O banco do servidor, com 14 boots por máquina, fica na ordem de alguns MB (10 × 14 × 15 KB ≈ 2 MB, mais 15 minutos de presença ≈ 30 KB). O histórico local de 48 h, se cada minuto for gravado, fica perto de 43 MB; o teto é 64 MB, e o dia mais antigo sai.
+Frota pessoal: até 10 máquinas. Captura local a cada 60 s. Payload nosso, depois de cortar scroll, tokens, retângulos e títulos, guardando só a árvore de divisão: teto de 128 panes e 256 KiB. Uma mesa típica de 30 panes fica em torno de 15 KB. Pior caso, se as 10 máquinas mudarem a mesa todo minuto: cerca de 216 MB/dia na rede, e o servidor substitui a linha do boot só quando `captured_at` é maior, em vez de acumular cada minuto. Em uso quieto o envio da mesa é raro; o que segue a cada minuto é a presença, cerca de 200 B. O banco do servidor, com 14 boots por máquina, fica na ordem de alguns MB (10 × 14 × 15 KB ≈ 2 MB, mais 15 minutos de presença ≈ 30 KB). O histórico local de 48 h, se cada minuto for gravado, fica perto de 43 MB; o teto é 64 MB, e o dia mais antigo sai.
 
 Meta de latência, neste tamanho: leitura da mesa de uma máquina abaixo de 50 ms no SQLite local; validar e gravar uma ingestão abaixo de 30 ms. Não há fila de servidor nem pool para dimensionar.
 
@@ -96,12 +96,12 @@ Loop de 60 s, alinhado ao relógio monotônico, não a “mais ou menos um minut
 
 1. Lê `boot_id`. No Linux, o texto de `/proc/sys/kernel/random/boot_id` (UUID; não ordena no tempo). No macOS, SHA-256 de `kern.boottime` em hexadecimal (também não ordena). O boot é o boot da máquina, não o restart do processo. Restart do agente no mesmo boot continua o mesmo `boot_id`. Quem ordena boots é o relógio do servidor, na tabela `boots`, não este id.
 2. Roda `herdr api snapshot` com timeout de 5 s e `argv` fixo. Sem shell. Se o processo falha, a volta **não** publica mesa vazia e **não** reescreve `latest.json`. A presença desta volta leva `herdr_ok: false`. O resto da volta é o mesmo: passos 4 a 6. Não há HTTP antes do passo 6.
-3. Se o snapshot vem, monta o payload allowlist. Descarta `scroll`, `tokens`, `terminal_title`, `terminal_title_stripped`, `layouts`, `restore_error`, `state_labels`, worktree, `foreground_cwd` e qualquer outro campo. O `cwd` do payload é o `cwd` do `PaneInfo`, ou vazio quando o Herdr manda nulo. Não se copia `foreground_cwd` para o lugar do `cwd`: são campos diferentes, e o v1 não casa por nenhum dos dois.
+3. Se o snapshot vem, monta o payload allowlist. De cada aba guarda a árvore de divisão: direção (`right` ou `down`), proporção e o id do pane em cada folha. Descarta o retângulo, `scroll`, `tokens`, `terminal_title`, `terminal_title_stripped`, `restore_error`, `state_labels`, worktree, `foreground_cwd` e qualquer outro campo. O `cwd` do payload é o `cwd` do `PaneInfo`, ou vazio quando o Herdr manda nulo. Não se copia `foreground_cwd` para o lugar do `cwd`: são campos diferentes, e o v1 não casa por nenhum dos dois.
 4. Monta a cauda desta volta na memória, ainda sem rede e sem substituir o spool no disco. A presença entra primeiro, com `observed_at` congelado. Se a mesa mudou, inclusive para uma lista vazia que o Herdr devolveu de verdade, o snapshot entra atrás dessa presença. O `snapshot_id` nasce ali, 32 hex de `crypto/rand`, e `captured_at` fica congelado no item. Nenhum dos dois é gerado de novo na retentativa. A cabeça do spool, com os itens já gravados, não muda de ordem. Presença na frente do snapshot desta volta faz o boot novo existir no servidor antes de a mesa nova cobrir a tela. Até esse snapshot ser aceito, o painel desenha a mesa de um boot anterior quando essa linha de `snapshots` existe, com a frase de boot anterior. Sem nenhuma linha de `snapshots`, a frase é “Nenhum pane nesta captura.” `herdr_ok` falso, com presença nova pelo `received_at`, acrescenta “Herdr sem resposta. A última captura continua aqui.”
 5. Durabilidade, ainda sem rede. Grava o spool inteiro, cabeça antiga mais a cauda do passo 4. Só quando o passo 3 produziu snapshot, grava também `latest.json` e a linha do histórico. Receita, em cada um desses arquivos: temporário no mesmo diretório, `Sync` do arquivo, rename, `Sync` do diretório pai. Falha de `Sync` do arquivo ou do rename aborta a volta; o arquivo anterior fica; não há HTTP. No Linux, falha de `Sync` do diretório também corta o HTTP desta volta. O rename já pode ter ficado; o arquivo novo permanece e a próxima volta lê o spool do disco, sem cunhar outro `snapshot_id` para um item que já está lá. O produto é queda de energia, e o rename sem o diretório pode sumir no segundo corte. No macOS o mesmo `Sync` de diretório é chamado. Se o kernel recusar, a volta grava uma linha em `~/.local/state/herdr-recall/dirsync-warn`, modo 0600: a hora UTC local e a frase de que o `Sync` do diretório foi recusado. O arquivo fica. A volta segue para o passo 6, porque o arquivo em si já foi sincronizado. Não se declara o macOS tão seguro quanto o Linux nesse passo. O Linux não escreve esse arquivo.
 6. Só então a rede. O spool é uma lista FIFO: o índice 0 é o mais antigo. Nesta mesma volta o agente continua a enviar a cabeça enquanto a resposta for 200 ou 409. Erro de rede ou 5xx para a volta; o item continua na cabeça e não há outro POST até a volta seguinte. 200 apaga o item, sem reescrever o corpo, e o envio segue na cabeça que sobrou, ainda nesta volta. Isso inclui o 200 que não cobre a mesa. 401 para o processo com saída 3 e não há outro POST nessa volta. 409 tira o item para `spool.conflict`, sem o corpo no log, e o envio segue na cabeça que sobrou, ainda nesta volta. Itens do boot anterior, se ainda estão na frente, saem na rede antes dos itens do boot novo, na mesma volta, enquanto a resposta for 200 ou 409. Isso não volta ao passo 5.
 
-Conjunto de panes que dispara envio: ids de workspace, aba e pane, rótulos, `cwd` do pane, harness, id de sessão, argv, base e confiança. `captured_at` não entra nessa comparação. Entra no hash canônico que o servidor guarda, e por isso a retentativa reenvia os bytes já gravados no spool, sem remarcar a hora. Mesa quieta não reenvia o corpo; reenvia presença.
+Conjunto de panes que dispara envio: ids de workspace, aba e pane, rótulos, `cwd` do pane, harness, id de sessão, argv, base, confiança e a árvore de divisão. `captured_at` não entra nessa comparação. Entra no hash canônico que o servidor guarda, e por isso a retentativa reenvia os bytes já gravados no spool, sem remarcar a hora. Mesa quieta não reenvia o corpo; reenvia presença.
 
 Casamento no v1, um passo só. `agent_session` do Herdr com `kind == "id"` e `agent` normalizado para `claude`, `grok` ou `opencode`: `session_id` é esse valor, `match_basis` é `herdr_agent_session`, `confidence` é `high`, e o argv é uma das três formas abaixo. `kind == "path"` não vira sessão e o valor não é armazenado. Sem `agent_session` de id, ou com agente fora dos três nomes: `session_id` e `resume_argv` ausentes, `match_basis` `none`, `confidence` `low`. A linha continua, com workspace, aba, pane e o `cwd` do pane, para a pessoa ver o diretório. O texto é “Sem sessão para restaurar.” Não há segunda tentativa por registro local nem por pid.
 
@@ -129,6 +129,8 @@ Arquivos, modo 0600, diretórios 0700:
 `herdr-recall setup` pergunta, no terminal, a URL, o código e o nome da máquina. Grava `agent.json` e o arquivo de token. `herdr-recall enroll --api URL --code CODIGO --name NOME` faz o mesmo sem pergunta, no formato de `internal/agent/agent.go` (`Enroll` faz `POST /v1/devices` com `code` e `name`). Se a URL mudou e já existe token, os dois comandos exigem um código novo e substituem o token. A fila local não é apagada. Se a unidade já estiver instalada, o fim do comando avisa que ela segue com a configuração antiga até `herdr-recall service install`. A mesma regra está no ADR 0032.
 
 `herdr-recall latest` imprime a tabela local sem falar com o servidor. Colunas, nesta ordem: workspace, aba, pane, diretório, harness, sessão, confiança, comando. Confiança sai como “alta” ou “baixa”, nunca `high`/`low`. Sessão vazia e comando vazio saem como “—”. O comando é a mesma linha com aspas simples que o botão Restaurar copia. Essa linha vai para a stdout porque a pessoa pediu a tabela. Log do processo, journal e arquivo de log do launchd não recebem argv, sessão nem cwd.
+
+`herdr-recall restore --session NOME` lê `latest.json` e monta essa mesa numa sessão nomeada que ainda não tem workspace. Recusa o nome `default`. Se a sessão já tem workspace, para e diz que nada foi executado. `--plan` só lê o snapshot e escreve o plano; a última linha é “Nada foi executado.” Sem `--plan`, cria o workspace, a aba e os `pane split` com a direção e a proporção gravadas, e chama `agent start` só quando a confiança é alta, não há ambiguidade e o argv está na allowlist. O zoom, quando a captura marcou a aba, vai para a primeira folha da divisão. O log desse comando também não leva argv, sessão nem cwd. O painel e o servidor não chamam este comando.
 
 Serviço, mesma forma do ADR 0032 e de `internal/service/service.go`:
 
@@ -774,11 +776,30 @@ type Pane struct {
 }
 
 type Snapshot struct {
-    SnapshotID string `json:"snapshot_id"`
-    Host       string `json:"host"`
-    BootID     string `json:"boot_id"`
-    CapturedAt string `json:"captured_at"` // 2006-01-02T15:04:05.000000000Z
-    Panes      []Pane `json:"panes"`       // mesa vazia é [], nunca null
+    SnapshotID string   `json:"snapshot_id"`
+    Host       string   `json:"host"`
+    BootID     string   `json:"boot_id"`
+    CapturedAt string   `json:"captured_at"` // 2006-01-02T15:04:05.000000000Z
+    Panes      []Pane   `json:"panes"`       // mesa vazia é [], nunca null
+    Layouts    []Layout `json:"layouts,omitempty"`
+}
+
+type Layout struct {
+    WorkspaceID     string `json:"workspace_id"`
+    TabID           string `json:"tab_id"`
+    WorkspaceNumber int    `json:"workspace_number"`
+    TabNumber       int    `json:"tab_number"`
+    Zoomed          bool   `json:"zoomed,omitempty"`
+    Root            *Node  `json:"root"`
+}
+
+type Node struct {
+    Type      string  `json:"type"` // pane ou split
+    PaneID    string  `json:"pane_id,omitempty"`
+    Direction string  `json:"direction,omitempty"` // right ou down
+    Ratio     float64 `json:"ratio,omitempty"`
+    First     *Node   `json:"first,omitempty"`
+    Second    *Node   `json:"second,omitempty"`
 }
 ```
 
@@ -986,7 +1007,7 @@ Decisões tomadas aqui, para não voltarem como lacuna, estão em Key Decisions.
 
 ## PR Plan
 
-O módulo de código ainda não existe. Cada PR é revisável sozinho. Nenhum deles é este documento. O loop de 60 s continua por último. Não há `match.go` no v1.
+Os PRs 1–8 estão no main. O recorte aceito em seguida é a restauração local, antes da lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O loop de 60 s continua por último. Não há `match.go` no v1.
 
 Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem fixtures do registro do Claude, do Grok e do OpenCode, um fixture Linux de `/proc/<pid>` e um procedimento de macOS que não use `/proc`. Se esse PR chamar `pane.process_info`, tem de dizer como `argv` e `cmdline` são descartados.
 
@@ -1029,6 +1050,12 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
    - Arquivos: `internal/web/tokens.css`, `internal/web/components.css`, `internal/web/embed.go`, `internal/web/contrast_test.go`, um template mínimo.
    - Depende de: PR 6.
    - Pode seguir em paralelo ao PR 7. O teste de contraste implementa a tabela deste documento. A página autenticada ainda não lista máquinas; só prova o embed e o “sair”.
+
+**Restauração local** (depois do PR 8, antes do PR 9)
+
+- Arquivos: `internal/contract/payload.go`, `internal/agent/layout.go`, `internal/agent/restore.go`, `cmd/agent/restore.go` e os testes.
+- Depende de: PR 3.
+- A captura guarda a árvore de divisão, sem retângulo, scroll nem título. `herdr-recall restore --session NOME` exige uma sessão vazia e diferente de `default`. `--plan` não cria pane. O servidor e o painel não chamam este comando.
 
 9. **Lista de máquinas e tabela de restaurar, com fixture**
    - Arquivos: templates da lista e do detalhe, `internal/web/panel.js`, SVG da faixa.

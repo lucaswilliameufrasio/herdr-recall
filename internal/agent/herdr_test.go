@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -76,10 +77,16 @@ func TestCaptureKeepsRestoreFieldsAndDropsTheRest(t *testing.T) {
 	if strings.Join(session.ResumeArgv, " ") != "opencode --session ses_abcdef12" {
 		t.Fatalf("argv: %v", session.ResumeArgv)
 	}
+	if len(latest.Layouts) != 1 || latest.Layouts[0].Root == nil || latest.Layouts[0].Root.Type != contract.NodeSplit {
+		t.Fatalf("divisão: %+v", latest.Layouts)
+	}
+	if latest.Layouts[0].Root.Direction != contract.SplitRight || latest.Layouts[0].Root.First.PaneID != "p0" || latest.Layouts[0].Root.Second.PaneID != "p1" {
+		t.Fatalf("árvore: %+v", latest.Layouts[0].Root)
+	}
 
 	raw := mustRead(t, filepath.Join(dir, "latest.json"))
 	spoolRaw := mustRead(t, filepath.Join(dir, "spool.json"))
-	for _, forbidden := range []string{"foreground-not-stored", "secret-title", "do not store", "/tmp/not-a-session", `"scroll"`, `"prompt"`, `"tokens"`, `"foreground_cwd"`} {
+	for _, forbidden := range []string{"foreground-not-stored", "secret-title", "do not store", "/tmp/not-a-session", `"scroll"`, `"prompt"`, `"tokens"`, `"foreground_cwd"`, `"rect"`} {
 		if strings.Contains(string(raw), forbidden) || strings.Contains(string(spoolRaw), forbidden) {
 			t.Fatalf("campo do Herdr vazou: %s", forbidden)
 		}
@@ -331,7 +338,124 @@ func testOptions(dir string, raw []byte, now time.Time) CaptureOptions {
 }
 
 func herdrRaw(panes string) []byte {
-	return []byte(`{"id":"req-1","result":{"type":"session_snapshot","snapshot":{"version":"t","protocol":22,"workspaces":[{"workspace_id":"w1","label":"mesa"}],"tabs":[{"tab_id":"t1","workspace_id":"w1","label":"aba"}],"panes":[` + panes + `],"layouts":[{"tab_id":"t1"}],"agents":[]}}}`)
+	type row struct {
+		PaneID      string `json:"pane_id"`
+		WorkspaceID string `json:"workspace_id"`
+		TabID       string `json:"tab_id"`
+	}
+	var rows []row
+	if panes != "" {
+		if err := json.Unmarshal([]byte("["+panes+"]"), &rows); err != nil {
+			panic(err)
+		}
+	}
+	type key struct {
+		workspace string
+		tab       string
+	}
+	var order []key
+	grouped := map[key][]row{}
+	for _, item := range rows {
+		itemKey := key{item.WorkspaceID, item.TabID}
+		if _, ok := grouped[itemKey]; !ok {
+			order = append(order, itemKey)
+		}
+		grouped[itemKey] = append(grouped[itemKey], item)
+	}
+	type idLabel struct {
+		ID     string `json:"workspace_id"`
+		Label  string `json:"label"`
+		Number int    `json:"number"`
+	}
+	type tabLabel struct {
+		ID          string `json:"tab_id"`
+		WorkspaceID string `json:"workspace_id"`
+		Label       string `json:"label"`
+		Number      int    `json:"number"`
+	}
+	type rect struct {
+		X      int `json:"x"`
+		Y      int `json:"y"`
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	}
+	type layoutPane struct {
+		PaneID string `json:"pane_id"`
+		Rect   rect   `json:"rect"`
+	}
+	type layoutSplit struct {
+		Direction string  `json:"direction"`
+		Ratio     float64 `json:"ratio"`
+		Rect      rect    `json:"rect"`
+	}
+	type layout struct {
+		WorkspaceID string        `json:"workspace_id"`
+		TabID       string        `json:"tab_id"`
+		Zoomed      bool          `json:"zoomed"`
+		Area        rect          `json:"area"`
+		Panes       []layoutPane  `json:"panes"`
+		Splits      []layoutSplit `json:"splits"`
+	}
+	wsNumber := map[string]int{}
+	tabNumber := map[string]int{}
+	var workspaces []idLabel
+	var tabs []tabLabel
+	var layouts []layout
+	for _, itemKey := range order {
+		if _, ok := wsNumber[itemKey.workspace]; !ok {
+			wsNumber[itemKey.workspace] = len(workspaces) + 1
+			workspaces = append(workspaces, idLabel{ID: itemKey.workspace, Label: "mesa", Number: wsNumber[itemKey.workspace]})
+		}
+		tabNumber[itemKey.tab] = len(tabs) + 1
+		tabs = append(tabs, tabLabel{ID: itemKey.tab, WorkspaceID: itemKey.workspace, Label: "aba", Number: tabNumber[itemKey.tab]})
+		members := grouped[itemKey]
+		panesOut := make([]layoutPane, len(members))
+		var splits []layoutSplit
+		for i, member := range members {
+			panesOut[i] = layoutPane{PaneID: member.PaneID, Rect: rect{X: i * 10, Y: 0, Width: 10, Height: 20}}
+		}
+		for i := 0; i < len(members)-1; i++ {
+			span := (len(members) - i) * 10
+			splits = append(splits, layoutSplit{
+				Direction: "right",
+				Ratio:     10 / float64(span),
+				Rect:      rect{X: i * 10, Y: 0, Width: span, Height: 20},
+			})
+		}
+		areaWidth := 10
+		if len(members) > 0 {
+			areaWidth = len(members) * 10
+		}
+		layouts = append(layouts, layout{
+			WorkspaceID: itemKey.workspace,
+			TabID:       itemKey.tab,
+			Area:        rect{Width: areaWidth, Height: 20},
+			Panes:       panesOut,
+			Splits:      splits,
+		})
+	}
+	if workspaces == nil {
+		workspaces = []idLabel{}
+	}
+	if tabs == nil {
+		tabs = []tabLabel{}
+	}
+	if layouts == nil {
+		layouts = []layout{}
+	}
+	workspaceJSON, err := json.Marshal(workspaces)
+	if err != nil {
+		panic(err)
+	}
+	tabJSON, err := json.Marshal(tabs)
+	if err != nil {
+		panic(err)
+	}
+	layoutJSON, err := json.Marshal(layouts)
+	if err != nil {
+		panic(err)
+	}
+	return []byte(`{"id":"req-1","result":{"type":"session_snapshot","snapshot":{"version":"t","protocol":22,"workspaces":` + string(workspaceJSON) + `,"tabs":` + string(tabJSON) + `,"panes":[` + panes + `],"layouts":` + string(layoutJSON) + `,"agents":[]}}}`)
 }
 
 func emptyHerdr() string {

@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"herdr-recall/internal/agent"
 )
@@ -14,6 +19,25 @@ import (
 func main() {
 	home, homeErr := os.UserHomeDir()
 	os.Exit(dispatch(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, home, homeErr, nil, runtime.GOOS))
+}
+
+var herdrRun agent.Runner = runHerdr
+
+func runHerdr(ctx context.Context, argv []string) ([]byte, error) {
+	if len(argv) == 0 || argv[0] != "herdr" {
+		return nil, errors.New("comando vazio")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 70*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Stdin = nil
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = io.Discard
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+	return stdout.Bytes(), nil
 }
 
 func dispatch(args []string, in io.Reader, out, errW io.Writer, home string, homeErr error, client *http.Client, goos string) int {
@@ -54,6 +78,14 @@ func dispatch(args []string, in io.Reader, out, errW io.Writer, home string, hom
 		}
 		fmt.Fprintln(errW, enrollMessage(err))
 		return 1
+	case "restore":
+		if homeErr != nil {
+			fmt.Fprintln(errW, "Não foi possível montar a mesa.")
+			return 1
+		}
+		path := filepath.Join(home, ".local", "state", "herdr-recall", "latest.json")
+		err := restoreCommand(args[1:], out, errW, path, herdrRun)
+		return restoreExit(err)
 	default:
 		fmt.Fprintln(out, "herdr-recall")
 		return 0
