@@ -131,7 +131,7 @@ Arquivos, modo 0600, diretórios 0700:
 
 `herdr-recall capture` faz uma volta de captura e para. Grava `latest.json` com a árvore de divisão, ainda sem HTTP. Se o Herdr não responde, o arquivo anterior fica e o comando diz isso. O log leva a contagem de panes e de divisões, sem argv, sessão nem cwd.
 
-`herdr-recall run` repete essa captura no ato e depois a cada 60 s, no relógio monotônico. Continua sem HTTP. `herdr-recall service install` grava a unidade de usuário que executa `run`. Neste corte o install não exige config nem token. `--dry-run` não grava e não chama o systemd nem o launchd. `doctor` lê a unidade, o `PATH`, o `herdr` e `dirsync-warn`. Não chama `/healthz` nem `GET /v1/device`; isso volta quando o envio existir. O linger, se estiver desligado, é aviso: o comando não liga.
+`herdr-recall run` repete essa captura no ato e depois a cada 60 s, no relógio monotônico. Continua sem HTTP. `herdr-recall service install` grava a unidade de usuário que executa `run`. Neste corte o install não exige config nem token. `--dry-run` não grava e não chama o systemd nem o launchd. `doctor` lê a unidade, o `PATH`, o `herdr` e `dirsync-warn`. Ainda não chama `/healthz` nem `GET /v1/device`: essas leituras e a exigência de config e token no install pertencem ao item 11, antes do envio do item 12. O linger, se estiver desligado, é aviso: o comando não liga.
 
 `herdr-recall latest` imprime a tabela local sem falar com o servidor. Colunas, nesta ordem: workspace, aba, pane, diretório, harness, sessão, confiança, comando. Confiança sai como “alta” ou “baixa”, nunca `high`/`low`. Sessão vazia e comando vazio saem como “—”. O comando é a mesma linha com aspas simples que o botão Restaurar copia. Essa linha vai para a stdout porque a pessoa pediu a tabela. Log do processo, journal e arquivo de log do launchd não recebem argv, sessão nem cwd.
 
@@ -153,7 +153,7 @@ RestartPreventExitStatus=3
 
 - macOS: `~/Library/LaunchAgents/dev.herdr-recall.agent.plist`, com o mesmo `PATH` em `EnvironmentVariables`. O rótulo do arquivo tem “agent” porque é o vocabulário do launchd, igual a `dev.ai-usage.agent.plist`. Não é um executável chamado `agent`. O launchd pode reiniciar depois da revogação; o `doctor` mostra o bloqueio. `RestartPreventExitStatus` não existe no launchd. Mesma consequência do ADR 0032.
 - `uninstall` tira só a unidade. Config, token, spool e histórico ficam.
-- `doctor`, neste corte local, só lê: plataforma, binário, unidade, `PATH` gravado, se `herdr` existe nesse `PATH`, linger (avisa, não liga) e `dirsync-warn` se o arquivo existir. Não chama `/healthz` nem `GET /v1/device`. `herdr` ausente desse `PATH` é `fail`. `dirsync-warn` presente é `warn`, não `fail`: não entra na conta que faz a saída 1. Sai 1 se houver `fail`. Sem `fail`, a saída é 0 mesmo com esse aviso. Config, token, fila e a chamada ao servidor entram quando o envio existir.
+- `doctor`, neste corte local, só lê: plataforma, binário, unidade, `PATH` gravado, se `herdr` existe nesse `PATH`, linger (avisa, não liga) e `dirsync-warn` se o arquivo existir. Não chama `/healthz` nem `GET /v1/device`. `herdr` ausente desse `PATH` é `fail`. `dirsync-warn` presente é `warn`, não `fail`: não entra na conta que faz a saída 1. Sai 1 se houver `fail`. Sem `fail`, a saída é 0 mesmo com esse aviso. Config, token e as leituras do servidor entram no item 11; o envio da fila fica no item 12.
 - Windows: mensagem de sem suporte e saída 1.
 
 Revogação: HTTP 401 com `{"error":"DEVICE_REVOKED"}`. O agente para o loop, conserva o spool, sai 3. Não pede outro token sozinho.
@@ -1092,7 +1092,7 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
     - A unidade local, sem HTTP, já está no main. Este item acrescenta config, token, `/healthz` e `GET /v1/device`.
     - Arquivos: `internal/agent/service_linux.go`, `internal/agent/service_darwin.go`, `internal/agent/service_other.go`, `doctor`.
     - Depende de: PR 3 e PR 7.
-    - `install`, `uninstall`, `doctor`. Unidade com `RestartPreventExitStatus=3` e `PATH` que inclui o diretório do `herdr`. `doctor` em `fail` se `herdr` não está nesse `PATH`. `dirsync-warn` presente é `warn`, não `fail`, e a saída continua 0 se esse for o único achado. Windows recusado. `--dry-run` não escreve unidade. O `doctor` chama `/healthz` e `GET /v1/device`.
+    - `install` exige config e token; `uninstall` preserva config, token, spool e histórico. Unidade com `RestartPreventExitStatus=3` e `PATH` que inclui o diretório do `herdr`. `doctor` em `fail` se `herdr` não está nesse `PATH`. `dirsync-warn` presente é `warn`, não `fail`, e a saída continua 0 se esse for o único achado. Windows recusado. `--dry-run` não escreve unidade. O `doctor` chama `/healthz` e `GET /v1/device`, sem antecipar o envio do item 12.
 
 12. **Loop de 60 s**
     - Arquivos: `internal/agent/loop.go`.
