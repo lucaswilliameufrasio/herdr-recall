@@ -5,6 +5,7 @@
 | Autor | [a preencher] |
 | Data | 2026-11-12 |
 | Status | Draft |
+| Progresso | PRs 1–8, restauração local, captura avulsa e serviço local de 60 s estão no `main`. O próximo é a lista de máquinas. O envio do loop continua por último. |
 | Nome | **herdr-recall** (provisório) |
 | Relação | Produto irmão do `ai-usage-tracker`. Não é uma página dele. Este documento é o registro do desenho. |
 
@@ -1011,7 +1012,7 @@ Decisões tomadas aqui, para não voltarem como lacuna, estão em Key Decisions.
 
 ## PR Plan
 
-Os PRs 1–8 estão no main. A restauração local, a captura avulsa e o serviço local de 60 s entram antes da lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O envio do loop continua por último. Não há `match.go` no v1.
+Os PRs 1–8 estão no main. A restauração local, a captura avulsa e o serviço local de 60 s também estão no main. O próximo é a lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O envio do loop continua por último. Não há `match.go` no v1.
 
 Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem fixtures do registro do Claude, do Grok e do OpenCode, um fixture Linux de `/proc/<pid>` e um procedimento de macOS que não use `/proc`. Se esse PR chamar `pane.process_info`, tem de dizer como `argv` e `cmdline` são descartados.
 
@@ -1057,23 +1058,27 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
 
 **Restauração local** (depois do PR 8, antes do PR 9)
 
+- No main.
 - Arquivos: `internal/contract/payload.go`, `internal/agent/layout.go`, `internal/agent/restore.go`, `cmd/agent/restore.go` e os testes.
 - Depende de: PR 3.
 - A captura guarda a árvore de divisão, sem retângulo, scroll nem título. `herdr-recall restore --session NOME` exige uma sessão vazia e diferente de `default`. `--plan` não cria pane. O servidor e o painel não chamam este comando.
 
 **Captura avulsa** (depois da restauração local, antes do PR 9)
 
+- No main.
 - Arquivos: `cmd/agent/capture.go`, `internal/agent/boot.go` e os testes.
 - Depende de: PR 3.
 - `herdr-recall capture` roda uma volta e grava `latest.json`. Sem HTTP e sem loop. Se o Herdr não responde, o arquivo anterior fica.
 
 **Serviço local de 60 s** (depois da captura avulsa, antes do PR 9)
 
+- No main. Não substitui o PR 11 nem o PR 12.
 - Arquivos: `internal/agent/loop.go`, `internal/agent/service.go`, `cmd/agent/run.go`, `cmd/agent/service.go` e os testes.
 - Depende de: PR 3.
 - `herdr-recall run` grava a captura na hora e a cada 60 s. `service install` liga a unidade de usuário. Sem HTTP. `doctor` não chama o servidor. O Windows fica de fora.
 
 9. **Lista de máquinas e tabela de restaurar, com fixture**
+   - Próximo.
    - Arquivos: templates da lista e do detalhe, `internal/web/panel.js`, SVG da faixa.
    - Depende de: PR 8.
    - Renderiza fixtures de mesa, não um agente ao vivo e não o loop. `<details>` com o comando inteiro, `data-argv` escapado pelo `html/template`, faixa de 15 minutos UTC. Frase “Nada foi executado.”
@@ -1084,6 +1089,7 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
     - Vazio, boot anterior, sem sinal, Herdr sem resposta, revogado, ambíguo, erro, cartões abaixo de 40 rem, foco e reduced-motion.
 
 11. **Serviço de usuário**
+    - A unidade local, sem HTTP, já está no main. Este item acrescenta config, token, `/healthz` e `GET /v1/device`.
     - Arquivos: `internal/agent/service_linux.go`, `internal/agent/service_darwin.go`, `internal/agent/service_other.go`, `doctor`.
     - Depende de: PR 3 e PR 7.
     - `install`, `uninstall`, `doctor`. Unidade com `RestartPreventExitStatus=3` e `PATH` que inclui o diretório do `herdr`. `doctor` em `fail` se `herdr` não está nesse `PATH`. `dirsync-warn` presente é `warn`, não `fail`, e a saída continua 0 se esse for o único achado. Windows recusado. `--dry-run` não escreve unidade. O `doctor` chama `/healthz` e `GET /v1/device`.
