@@ -17,6 +17,9 @@
 <button class="button-secondary" type="submit">Sair</button>
 </form>
 </header>
+{{if eq .Page "machines"}}{{template "machines" .Machines}}{{end}}
+{{if eq .Page "detail"}}{{template "detail" .Detail}}{{end}}
 </main>
+{{if .Page}}<script src="/assets/panel.js" defer></script>{{end}}
 </body>
 </html>

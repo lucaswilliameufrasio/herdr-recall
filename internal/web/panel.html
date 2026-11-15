@@ -1,0 +1,25 @@
+{{define "machines"}}
+<section><h2>Máquinas</h2>
+{{if .}}<ul class="machines">{{range .}}
+<li><a href="/maquinas/{{.ID}}">{{.Name}}</a><p>{{.Freshness}}</p><p>Boot: {{.Boot}} · {{.PaneCount}} panes</p></li>
+{{end}}</ul>{{else}}<p>Nenhuma máquina. Gere um código e instale o agente.</p>{{end}}
+</section>
+{{end}}
+{{define "detail"}}
+<section><p><a href="/">Máquinas</a></p><h2>{{.Name}}</h2>
+<p>{{.Freshness}}</p>
+{{if .Presence.Slots}}
+<svg class="freshness" viewBox="0 0 150 20" role="img" aria-labelledby="presence-title"><title id="presence-title">{{.Presence.Label}}</title>
+{{range .Presence.Slots}}<rect class="{{.Class}}" x="{{.X}}" y="6" width="8" height="8"></rect>{{end}}
+</svg><p>{{.Presence.Label}}</p>
+{{end}}
+{{if .Boots}}<nav aria-label="Boots"><h3>Boots</h3><ul>{{range .Boots}}<li><a href="/maquinas/{{$.ID}}?boot={{.ID}}"><time datetime="{{.FirstReceived}}">{{.FirstReceived}} UTC</time> · {{.ID}}</a></li>{{end}}</ul></nav>{{end}}
+{{if .HasSnapshot}}
+<h3>Captura</h3><p>Boot: {{.Boot}}</p>
+{{if .Panes}}
+<table class="pane-table"><thead><tr><th>Aba</th><th>Pane</th><th>Workspace</th><th>Diretório</th><th>Harness</th><th>Sessão</th><th>Confiança</th><th>Restaurar</th></tr></thead>
+<tbody>{{range .Panes}}<tr><td>{{cell .Tab}}</td><td>{{cell .Pane}}</td><td>{{cell .Workspace}}</td><td>{{cell .Directory}}</td><td>{{cell .Harness}}</td><td>{{cell .Session}}</td><td>{{.Confidence}}</td><td>{{if .Command}}<details><summary>mostrar</summary><pre>{{.Command}}</pre></details><button class="button-restore" type="button" data-argv="{{.Command}}">Restaurar</button><span class="copy-result" role="status"></span>{{else}}Sem sessão para restaurar.{{end}}</td></tr>{{end}}</tbody></table>
+{{else}}<p>Nenhum pane nesta captura.</p>{{end}}
+{{else}}<p>Nenhum pane nesta captura.</p>{{end}}
+</section>
+{{end}}

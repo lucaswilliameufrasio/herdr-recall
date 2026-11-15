@@ -65,3 +65,65 @@ body {
   background: var(--color-surface);
   border-color: var(--color-line-strong);
 }
+
+.machines {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.machines li {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-line);
+  border-radius: var(--radius-card);
+}
+
+.machines p {
+  margin: var(--space-2) 0;
+}
+
+a {
+  color: var(--color-text-accent);
+}
+
+a:focus-visible, summary:focus-visible, .button-restore:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.pane-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.pane-table th, .pane-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-line);
+}
+
+.pane-table pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.button-restore {
+  font: inherit;
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border: var(--border-width) solid var(--color-accent);
+  border-radius: var(--radius-control);
+  min-height: var(--size-target);
+  padding: var(--space-2) var(--space-3);
+}
+
+.freshness {
+  width: 100%;
+  height: var(--size-chart);
+}
+
+.freshness .beat { fill: var(--color-chart-current); }
+.freshness .miss { fill: var(--color-chart-muted); }

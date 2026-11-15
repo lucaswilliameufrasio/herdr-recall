@@ -5,7 +5,7 @@
 | Autor | [a preencher] |
 | Data | 2026-11-12 |
 | Status | Draft |
-| Progresso | PRs 1–8, restauração local, captura avulsa e serviço local de 60 s estão no `main`. O próximo é a lista de máquinas. O envio do loop continua por último. |
+| Progresso | PRs 1–9, restauração local, captura avulsa e serviço local de 60 s estão no `main`. O próximo são os estados e a viewport estreita. O envio do loop continua por último. |
 | Nome | **herdr-recall** (provisório) |
 | Relação | Produto irmão do `ai-usage-tracker`. Não é uma página dele. Este documento é o registro do desenho. |
 
@@ -1012,7 +1012,7 @@ Decisões tomadas aqui, para não voltarem como lacuna, estão em Key Decisions.
 
 ## PR Plan
 
-Os PRs 1–8 estão no main. A restauração local, a captura avulsa e o serviço local de 60 s também estão no main. O próximo é a lista de máquinas. Cada PR é revisável sozinho. Nenhum deles é este documento. O envio do loop continua por último. Não há `match.go` no v1.
+Os PRs 1–9 estão no main. A restauração local, a captura avulsa e o serviço local de 60 s também estão no main. O próximo são os estados e a viewport estreita. Cada PR é revisável sozinho. Nenhum deles é este documento. O envio do loop continua por último. Não há `match.go` no v1.
 
 Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem fixtures do registro do Claude, do Grok e do OpenCode, um fixture Linux de `/proc/<pid>` e um procedimento de macOS que não use `/proc`. Se esse PR chamar `pane.process_info`, tem de dizer como `argv` e `cmdline` são descartados.
 
@@ -1078,12 +1078,13 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
 - `herdr-recall run` grava a captura na hora e a cada 60 s. `service install` liga a unidade de usuário. Sem HTTP. `doctor` não chama o servidor. O Windows fica de fora.
 
 9. **Lista de máquinas e tabela de restaurar, com fixture**
-   - Próximo.
+   - Concluído: lista e detalhe leem o SQLite, com testes usando fixtures; não há agente ao vivo nem envio do loop.
    - Arquivos: templates da lista e do detalhe, `internal/web/panel.js`, SVG da faixa.
    - Depende de: PR 8.
    - Renderiza fixtures de mesa, não um agente ao vivo e não o loop. `<details>` com o comando inteiro, `data-argv` escapado pelo `html/template`, faixa de 15 minutos UTC. Frase “Nada foi executado.”
 
 10. **Estados e viewport estreita**
+    - Próximo.
     - Arquivos: os mesmos templates e `components.css`.
     - Depende de: PR 9.
     - Vazio, boot anterior, sem sinal, Herdr sem resposta, revogado, ambíguo, erro, cartões abaixo de 40 rem, foco e reduced-motion.

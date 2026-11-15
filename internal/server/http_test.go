@@ -446,15 +446,13 @@ func TestDeviceTokenCannotOpenHome(t *testing.T) {
 		t.Fatal("a home listou a máquina")
 	}
 	operatorHome := h.call(http.MethodGet, "/", nil, cookieHeader(cookie))
-	if operatorHome.Code != http.StatusOK || strings.Contains(operatorHome.Body.String(), name) {
-		t.Fatal("a home listou a máquina")
+	if operatorHome.Code != http.StatusOK || !strings.Contains(operatorHome.Body.String(), name) {
+		t.Fatal("a home não listou a máquina")
 	}
 	detail := h.call(http.MethodGet, "/maquinas/"+id, nil, bearerHeader(token))
 	mustCode(t, detail, statusUnauthorized, codeUnauthorized)
 	detail = h.call(http.MethodGet, "/maquinas/"+id, nil, cookieHeader(cookie))
-	var machine map[string]any
-	mustJSON(t, detail, http.StatusOK, &machine)
-	if machine["name"] != name || machine["panes"] != nil || machine["resume_argv"] != nil {
+	if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), name) || strings.Contains(detail.Body.String(), token) {
 		t.Fatal("detalhe")
 	}
 }
@@ -637,9 +635,7 @@ func TestRevocationKeepsTheDesk(t *testing.T) {
 	hidden := h.call(http.MethodGet, "/v1/device", nil, bearerHeader(token))
 	mustCode(t, hidden, statusUnauthorized, codeDeviceRevoked)
 	stillThere := h.call(http.MethodGet, "/maquinas/"+id, nil, cookieHeader(cookie))
-	var machine map[string]string
-	mustJSON(t, stillThere, http.StatusOK, &machine)
-	if machine["name"] != "Mesa 1" {
+	if stillThere.Code != http.StatusOK || !strings.Contains(stillThere.Body.String(), "Mesa 1") {
 		t.Fatal("a máquina sumiu")
 	}
 	absent := h.call(http.MethodPost, "/maquinas/nao-existe/revogar", nil, h.operatorHeader(cookie, csrf))

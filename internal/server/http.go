@@ -49,7 +49,7 @@ type Options struct {
 	TLS        bool
 }
 
-// Server is the listener. Home is the shell, not the desk.
+// Server is the listener.
 type Server struct {
 	store      *Store
 	nowFn      func() time.Time
@@ -257,12 +257,12 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) asset(w http.ResponseWriter, r *http.Request) {
-	body, err := web.Stylesheet(r.PathValue("name"))
+	body, contentType, err := web.Asset(r.PathValue("name"))
 	if err != nil {
 		writeError(w, statusNotFound, codeNotFound, nil)
 		return
 	}
-	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
@@ -273,8 +273,13 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	machines, err := s.store.panelMachines(s.now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
+		return
+	}
 	var buf bytes.Buffer
-	if err := web.RenderShell(&buf, csrf); err != nil {
+	if err := web.RenderMachinesPage(&buf, csrf, machines); err != nil {
 		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
 		return
 	}
@@ -314,10 +319,11 @@ func (s *Server) createCode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) machine(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := s.operator(w, r); !ok {
+	_, csrf, ok := s.operator(w, r)
+	if !ok {
 		return
 	}
-	row, found, err := s.store.DeviceByID(r.PathValue("id"))
+	detail, found, err := s.store.panelDetail(r.PathValue("id"), r.URL.Query().Get("boot"), s.now())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
 		return
@@ -326,10 +332,14 @@ func (s *Server) machine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, statusNotFound, codeNotFound, nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"id":   row.ID,
-		"name": row.Name,
-	})
+	var buf bytes.Buffer
+	if err := web.RenderDetailPage(&buf, csrf, detail); err != nil {
+		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
