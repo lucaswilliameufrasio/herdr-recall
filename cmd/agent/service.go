@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"time"
@@ -11,38 +10,8 @@ import (
 	"herdr-recall/internal/agent"
 )
 
-func serviceCommand(args []string, out, errW io.Writer, manager agent.Manager) int {
-	if len(args) == 0 {
-		fmt.Fprintln(errW, "uso: herdr-recall service install [--dry-run] | uninstall | doctor")
-		return 2
-	}
-	switch args[0] {
-	case "install":
-		return serviceInstall(args[1:], out, errW, manager)
-	case "uninstall":
-		return serviceUninstall(args[1:], out, errW, manager)
-	case "doctor":
-		return serviceDoctor(args[1:], out, errW, manager)
-	default:
-		fmt.Fprintln(errW, "uso: herdr-recall service install [--dry-run] | uninstall | doctor")
-		return 2
-	}
-}
-
-func serviceInstall(args []string, out, errW io.Writer, manager agent.Manager) int {
-	flags := flag.NewFlagSet("service install", flag.ContinueOnError)
-	flags.SetOutput(errW)
-	dry := flags.Bool("dry-run", false, "mostra a unidade sem gravar")
-	flags.Usage = func() {
-		fmt.Fprintln(errW, "uso: herdr-recall service install [--dry-run]")
-	}
-	if err := flags.Parse(args); err != nil {
-		return 2
-	}
-	if len(flags.Args()) > 0 {
-		flags.Usage()
-		return 2
-	}
+func serviceInstall(dryRun bool, out, errW io.Writer, manager agent.Manager) int {
+	dry := &dryRun
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	report, err := manager.Install(ctx, agent.InstallOptions{DryRun: *dry})
@@ -65,11 +34,7 @@ func serviceInstall(args []string, out, errW io.Writer, manager agent.Manager) i
 	return 0
 }
 
-func serviceUninstall(args []string, out, errW io.Writer, manager agent.Manager) int {
-	if len(args) > 0 {
-		fmt.Fprintln(errW, "uso: herdr-recall service uninstall")
-		return 2
-	}
+func serviceUninstall(out, errW io.Writer, manager agent.Manager) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	report, err := manager.Uninstall(ctx)
@@ -88,11 +53,7 @@ func serviceUninstall(args []string, out, errW io.Writer, manager agent.Manager)
 	return 0
 }
 
-func serviceDoctor(args []string, out, errW io.Writer, manager agent.Manager) int {
-	if len(args) > 0 {
-		fmt.Fprintln(errW, "uso: herdr-recall service doctor")
-		return 2
-	}
+func serviceDoctor(out, errW io.Writer, manager agent.Manager) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	checks := manager.Doctor(ctx)

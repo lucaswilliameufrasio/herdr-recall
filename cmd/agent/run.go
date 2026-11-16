@@ -11,11 +11,7 @@ import (
 	"herdr-recall/internal/agent"
 )
 
-func runCommand(args []string, errW io.Writer, opt agent.CaptureOptions, home string) int {
-	if len(args) > 0 {
-		fmt.Fprintln(errW, "uso: herdr-recall run")
-		return 2
-	}
+func runCommand(errW io.Writer, opt agent.CaptureOptions, home string) int {
 	if opt.StateDir == "" || opt.BootID == "" || opt.Host == "" {
 		fmt.Fprintln(errW, "Não foi possível gravar a captura.")
 		return 1

@@ -34,13 +34,17 @@ if [ -n "$dirty" ]; then
   printf '%s\n' 'NÃO PUBLICAR: construído com alterações locais.' > "$output/LOCAL-ONLY"
 fi
 git rev-parse HEAD > "$output/COMMIT"
+revision=$(git rev-parse HEAD)
+built_at=$(git log -1 --format=%cI HEAD)
+agent_ldflags="-s -w -X main.version=$tag -X main.commit=$revision -X main.buildDate=$built_at"
+server_ldflags="-s -w -X main.version=$tag"
 sed "s/@RELEASE_TAG@/$tag/g" scripts/herdr-recall-installer.sh > "$output/herdr-recall-installer.sh"
 for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
   os=${target%-*}
   arch=${target#*-}
   mkdir "$output/$target"
-  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -o "$output/$target/herdr-recall" ./cmd/agent
-  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -o "$output/$target/herdr-recall-server" ./cmd/recall
+  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$agent_ldflags" -o "$output/$target/herdr-recall" ./cmd/agent
+  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$server_ldflags" -o "$output/$target/herdr-recall-server" ./cmd/recall
   cp install.sh README.md "$output/$target/"
   tar -C "$output/$target" -czf "$output/herdr-recall-$tag-$target.tar.gz" herdr-recall herdr-recall-server install.sh README.md
 done

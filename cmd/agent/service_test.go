@@ -38,7 +38,7 @@ func TestServiceDoctorPrintsRecoveryWithoutToken(t *testing.T) {
 	manager.Runner = nil
 	manager.LookPath = func(string) (string, error) { return "/usr/bin/systemctl", nil }
 	var out, errW bytes.Buffer
-	code := serviceDoctor(nil, &out, &errW, manager)
+	code := serviceDoctor(&out, &errW, manager)
 	if code != 1 || !strings.Contains(out.String(), "token recusado ou dispositivo revogado") || !strings.Contains(out.String(), "herdr-recall setup") {
 		t.Fatalf("doctor não indicou recuperação: code=%d", code)
 	}
@@ -51,7 +51,7 @@ func TestServiceInstallDryRunRequiresEnrollmentAndDoesNotWrite(t *testing.T) {
 	home := t.TempDir()
 	manager := agent.NewManager("linux", home, filepath.Join(home, "herdr-recall"), "fixture", 1000)
 	var out, errW bytes.Buffer
-	if code := serviceInstall([]string{"--dry-run"}, &out, &errW, manager); code != 1 {
+	if code := serviceInstall(true, &out, &errW, manager); code != 1 {
 		t.Fatal("dry-run sem enrolamento não foi recusado")
 	}
 	const token = "synthetic-dryrun-token"
@@ -60,7 +60,7 @@ func TestServiceInstallDryRunRequiresEnrollmentAndDoesNotWrite(t *testing.T) {
 	}
 	out.Reset()
 	errW.Reset()
-	if code := serviceInstall([]string{"--dry-run"}, &out, &errW, manager); code != 0 || !strings.Contains(out.String(), "Nada foi instalado.") {
+	if code := serviceInstall(true, &out, &errW, manager); code != 0 || !strings.Contains(out.String(), "Nada foi instalado.") {
 		t.Fatalf("dry-run falhou: code=%d", code)
 	}
 	unit, err := manager.FilePath()

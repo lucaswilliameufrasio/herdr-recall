@@ -167,8 +167,8 @@ func TestDispatchLatestStaysLocal(t *testing.T) {
 		return nil, os.ErrClosed
 	})}
 	var out, errW bytes.Buffer
-	if dispatch(nil, nil, &out, &errW, home, nil, client, "linux") != 0 || out.String() != "herdr-recall\n" {
-		t.Fatal("nome")
+	if dispatch(nil, nil, &out, &errW, home, nil, client, "linux") != 0 || !strings.Contains(out.String(), "Comece por aqui") {
+		t.Fatalf("ajuda: %q", out.String())
 	}
 	out.Reset()
 	if dispatch([]string{"latest"}, nil, &out, &errW, home, nil, client, "linux") != 0 {
