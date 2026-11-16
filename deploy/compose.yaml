@@ -1,0 +1,17 @@
+services:
+  recall:
+    image: ${RECALL_IMAGE:?Defina RECALL_IMAGE com a imagem imutável}
+    network_mode: host
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - type: bind
+        source: ${RECALL_DATA_DIR:?Defina RECALL_DATA_DIR como caminho absoluto}
+        target: /data
+        bind:
+          create_host_path: false

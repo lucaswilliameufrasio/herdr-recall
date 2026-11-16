@@ -6,6 +6,8 @@ O desenho aceito está em [docs/design.md](docs/design.md). O nome é provisóri
 
 O servidor escuta em `127.0.0.1:8788`. O executável do agente é `herdr-recall`. O do servidor é `herdr-recall-server`. Nenhum dos dois se instala com o nome `agent`.
 
+Para preparar uma VPS Linux com Docker Compose, consulte [deploy em VPS](docs/deploy-vps.md). A configuração ainda precisa ser validada em ambiente isolado antes de produção.
+
 ### Instalação
 
 O instalador externo seleciona Linux ou macOS e amd64 ou arm64, baixa o pacote correspondente e verifica seu SHA-256. Ele está disponível a partir da v0.3.0; a v0.2.0 não o possui:
