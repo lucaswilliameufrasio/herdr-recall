@@ -6,6 +6,18 @@ O desenho aceito está em [docs/design.md](docs/design.md). O nome é provisóri
 
 O servidor escuta em `127.0.0.1:8788`. O executável do agente é `herdr-recall`. O do servidor é `herdr-recall-server`. Nenhum dos dois se instala com o nome `agent`.
 
+### Instalação
+
+Baixe o pacote da release correspondente ao sistema e à arquitetura e confira seu SHA-256 com o arquivo `SHA256SUMS` da mesma release. Extraia o pacote e, dentro do diretório extraído, execute:
+
+```sh
+sh install.sh
+```
+
+O instalador copia os dois binários para `~/.local/bin`, sem substituir arquivos existentes. Para outro destino, use `sh install.sh --bin-dir /caminho/para/bin`. Ele não usa sudo, não altera o PATH e não instala nem inicia o serviço. Depois, inclua o diretório no PATH se necessário e execute `herdr-recall setup`; `herdr-recall service install` é uma etapa separada.
+
+O instalador está nos pacotes a partir da `v0.2.0`; os pacotes já publicados como `v0.1.0` não o contêm.
+
 `herdr-recall-server` usa por padrão o banco privado `~/.local/state/herdr-recall-server/server.db` e aceita `--bind` e `--db`. O listener sem TLS é restrito a loopback; um proxy externo pode terminar TLS e encaminhar ao endereço local.
 
 `herdr-recall capture` grava uma captura local e para. Não fala com o servidor.
@@ -24,5 +36,7 @@ Na máquina onde o agente roda, execute `herdr-recall service doctor`. Os númer
 4. Se o diagnóstico não conseguir ler a fila ou a quarentena, preserve os arquivos e investigue permissões e integridade. Uma falha ao sincronizar pode deixar o estado incerto; não presuma que o servidor não recebeu o item.
 
 O agente tenta informar ao servidor apenas as contagens locais antes e depois de cada volta de envio. O painel mostra a última leitura como recente, antiga ou indisponível; ela pode ter mudado depois da observação e não prova que a máquina esteja online. A fila de capturas continua independente desse relato, e falhas de comunicação podem deixar os dados antigos.
+
+Para validar o adaptador contra uma sessão Herdr real, `HERDR_RECALL_LIVE_TEST=1 go test -count=1 ./internal/server -run '^TestLiveHerdrDelivery$' -v` usa um servidor loopback e banco e estado temporários. A captura contém dados privados da sessão, mas o teste informa somente contagens e remove seus arquivos temporários ao terminar. A suíte normal não acessa o Herdr real.
 
 `herdr-recall restore --session NOME` monta a última captura numa sessão nomeada que já está aberta e ainda não tem workspace. `default` fica como está. `--plan` só mostra o que seria feito.
