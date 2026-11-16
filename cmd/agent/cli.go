@@ -109,7 +109,7 @@ func newRoot(e *env) *cobra.Command {
 		setupCmd(e), enrollCmd(e), statusCmd(e),
 		latestCmd(e), historyCmd(e), restoreCmd(e), captureCmd(e),
 		serviceCmd(e), runCmd(e), verifyCmd(e), queueCmd(e), logsCmd(e), configCmd(e),
-		versionCmd(e), completionCmd(e),
+		updateCmd(e), versionCmd(e), completionCmd(e),
 	)
 	applyTemplates(root)
 	return root
