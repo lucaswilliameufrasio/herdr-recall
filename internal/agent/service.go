@@ -26,6 +26,8 @@ var (
 	ErrTemporaryBinary = errors.New("binário temporário")
 	ErrAgentName       = errors.New("executável agent")
 	ErrBinaryPath      = errors.New("caminho do binário")
+	ErrServiceConfig   = errors.New("configuração ausente ou inválida; execute herdr-recall setup")
+	ErrServiceToken    = errors.New("token ausente, inválido ou inseguro; execute herdr-recall setup")
 )
 
 // CommandRunner runs one command without a shell.
@@ -316,6 +318,9 @@ func (m Manager) Install(ctx context.Context, opts InstallOptions) (Report, erro
 	if err != nil {
 		return Report{}, err
 	}
+	if _, _, err := m.serviceCredentials(); err != nil {
+		return Report{}, err
+	}
 	file, err := m.FilePath()
 	if err != nil {
 		return Report{}, err
@@ -479,8 +484,7 @@ func Failed(checks []Check) bool {
 
 var launchState = regexp.MustCompile(`state = (\w+)`)
 
-// Doctor reads the unit, the PATH, and dirsync-warn. It does not call the server
-// and it does not enable linger.
+// Doctor reads local service state and checks the server without changing it.
 func (m Manager) Doctor(ctx context.Context) []Check {
 	var checks []Check
 	add := func(name string, status Status, detail string, fix string) {
@@ -500,7 +504,7 @@ func (m Manager) Doctor(ctx context.Context) []Check {
 	if m.LookPath != nil {
 		if _, lookErr := m.LookPath(tool); lookErr != nil {
 			add("plataforma", StatusFail, tool+" ausente", "")
-			return checks
+			return append(checks, m.serverChecks(ctx)...)
 		}
 	}
 	add("plataforma", StatusOK, label, "")
@@ -552,6 +556,7 @@ func (m Manager) Doctor(ctx context.Context) []Check {
 	if info, statErr := os.Stat(warnPath); statErr == nil && !info.IsDir() {
 		add("dirsync", StatusWarn, "o sync de diretório foi recusado", "")
 	}
+	checks = append(checks, m.serverChecks(ctx)...)
 	return checks
 }
 

@@ -97,7 +97,11 @@ func serviceDoctor(args []string, out, errW io.Writer, manager agent.Manager) in
 	defer cancel()
 	checks := manager.Doctor(ctx)
 	for _, check := range checks {
-		fmt.Fprintf(out, "%s\t%s\t%s\n", check.Status, check.Name, check.Detail)
+		if check.Fix != "" {
+			fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", check.Status, check.Name, check.Detail, check.Fix)
+		} else {
+			fmt.Fprintf(out, "%s\t%s\t%s\n", check.Status, check.Name, check.Detail)
+		}
 	}
 	if agent.Failed(checks) {
 		fmt.Fprintln(errW, "doctor fail")

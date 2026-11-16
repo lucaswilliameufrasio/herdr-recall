@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +23,7 @@ func TestDryRunPrintsTheUnitAndWritesNothing(t *testing.T) {
 	exe := filepath.Join(home, "herdr-recall")
 	runner := &fakeCmd{fail: true}
 	manager := testManager(home, exe, herdr, runner)
+	serviceTestEnrollment(t, home, "http://127.0.0.1:12345")
 	report, err := manager.Install(context.Background(), InstallOptions{DryRun: true})
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +77,7 @@ func TestInstallWritesAndUninstallKeepsCaptures(t *testing.T) {
 	exe := filepath.Join(home, "my bin", "herdr-recall")
 	runner := &fakeCmd{linger: "no"}
 	manager := testManager(home, exe, herdr, runner)
+	serviceTestEnrollment(t, home, "http://127.0.0.1:12345")
 	report, err := manager.Install(context.Background(), InstallOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +105,10 @@ func TestInstallWritesAndUninstallKeepsCaptures(t *testing.T) {
 	if err := os.WriteFile(latest, []byte(`{"panes":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	paths := PathsFor(home)
+	if err := os.WriteFile(paths.Spool, []byte("fixture-spool"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	removed, err := manager.Uninstall(context.Background())
 	if err != nil || !removed.Changed {
 		t.Fatal(err)
@@ -111,10 +119,24 @@ func TestInstallWritesAndUninstallKeepsCaptures(t *testing.T) {
 	if _, err := os.Stat(latest); err != nil {
 		t.Fatal(err)
 	}
+	for _, path := range []string{paths.Config, paths.Token, paths.Spool} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatal("uninstall removeu arquivos de dados")
+		}
+	}
 }
 
 func TestDoctorWarnsAboutDirsyncWithoutFailing(t *testing.T) {
 	home := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			_, _ = w.Write([]byte("ok"))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"fixture","name":"Máquina","created_at":"2026-11-13T00:00:00Z"}`))
+	}))
+	defer server.Close()
+	serviceTestEnrollment(t, home, server.URL)
 	herdr := filepath.Join(home, "bin", "herdr")
 	if err := os.MkdirAll(filepath.Dir(herdr), 0o755); err != nil {
 		t.Fatal(err)
@@ -171,6 +193,7 @@ func TestDarwinDryRunUsesLaunchdVocabulary(t *testing.T) {
 	exe := filepath.Join(home, "herdr-recall")
 	manager := testManager(home, exe, "", &fakeCmd{fail: true})
 	manager.GOOS = "darwin"
+	serviceTestEnrollment(t, home, "http://127.0.0.1:12345")
 	report, err := manager.Install(context.Background(), InstallOptions{DryRun: true})
 	if err != nil {
 		t.Fatal(err)
@@ -183,6 +206,13 @@ func TestDarwinDryRunUsesLaunchdVocabulary(t *testing.T) {
 	}
 	if _, statErr := os.Stat(report.File); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatal("o dry-run gravou o plist")
+	}
+}
+
+func serviceTestEnrollment(t *testing.T, home, api string) {
+	t.Helper()
+	if err := Save(PathsFor(home), api, "test-token", nil); err != nil {
+		t.Fatal(err)
 	}
 }
 
