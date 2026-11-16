@@ -106,9 +106,9 @@ func newRoot(e *env) *cobra.Command {
 		},
 	})
 	root.AddCommand(
-		setupCmd(e), enrollCmd(e),
-		latestCmd(e), restoreCmd(e), captureCmd(e),
-		serviceCmd(e), runCmd(e), verifyCmd(e),
+		setupCmd(e), enrollCmd(e), statusCmd(e),
+		latestCmd(e), historyCmd(e), restoreCmd(e), captureCmd(e),
+		serviceCmd(e), runCmd(e), verifyCmd(e), queueCmd(e), logsCmd(e), configCmd(e),
 		versionCmd(e), completionCmd(e),
 	)
 	applyTemplates(root)
