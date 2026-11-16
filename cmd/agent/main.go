@@ -4,13 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"time"
 
 	"herdr-recall/internal/agent"
@@ -18,7 +14,16 @@ import (
 
 func main() {
 	home, homeErr := os.UserHomeDir()
-	os.Exit(dispatch(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, home, homeErr, nil, runtime.GOOS))
+	e := &env{
+		in:      os.Stdin,
+		out:     os.Stdout,
+		errW:    os.Stderr,
+		home:    home,
+		homeErr: homeErr,
+		goos:    goosName(),
+		tty:     isTerminal(os.Stdin) && isTerminal(os.Stdout),
+	}
+	os.Exit(dispatchEnv(e, os.Args[1:]))
 }
 
 var herdrRun agent.Runner = runHerdr
@@ -38,111 +43,4 @@ func runHerdr(ctx context.Context, argv []string) ([]byte, error) {
 		return nil, err
 	}
 	return stdout.Bytes(), nil
-}
-
-func dispatch(args []string, in io.Reader, out, errW io.Writer, home string, homeErr error, client *http.Client, goos string) int {
-	if len(args) == 0 {
-		fmt.Fprintln(out, "herdr-recall")
-		return 0
-	}
-	switch args[0] {
-	case "latest":
-		if homeErr != nil {
-			fmt.Fprintln(errW, "Não foi possível mostrar as capturas.")
-			return 1
-		}
-		path := filepath.Join(home, ".local", "state", "herdr-recall", "latest.json")
-		if err := run(args, out, errW, path); err != nil {
-			fmt.Fprintln(errW, "Não foi possível mostrar as capturas.")
-			return 1
-		}
-		return 0
-	case "setup", "enroll":
-		if homeErr != nil {
-			fmt.Fprintln(errW, "Não foi possível enrolar esta máquina.")
-			return 1
-		}
-		paths := agent.PathsFor(home)
-		unit := unitInstalled(home, goos)
-		var err error
-		if args[0] == "setup" {
-			err = setup(args[1:], in, out, errW, paths, client, unit)
-		} else {
-			err = enroll(args[1:], out, errW, paths, client, unit)
-		}
-		if err == nil {
-			return 0
-		}
-		if errorsIsUsage(err) {
-			return 2
-		}
-		fmt.Fprintln(errW, enrollMessage(err))
-		return 1
-	case "capture":
-		if homeErr != nil {
-			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
-			return 1
-		}
-		opt, err := deskOptions(home)
-		if err != nil {
-			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
-			return 1
-		}
-		return captureCommand(args[1:], out, errW, opt)
-	case "verify":
-		if homeErr != nil {
-			fmt.Fprintln(errW, "Não foi possível verificar esta máquina.")
-			return 1
-		}
-		return verifyCommand(args[1:], out, errW, home, goos)
-	case "run":
-		if len(args) != 1 {
-			fmt.Fprintln(errW, "uso: herdr-recall run")
-			return 2
-		}
-		if homeErr != nil {
-			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
-			return 1
-		}
-		opt, err := deskOptions(home)
-		if err != nil {
-			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
-			return 1
-		}
-		return runCommand(nil, errW, opt, home)
-	case "service":
-		if homeErr != nil {
-			fmt.Fprintln(errW, "Não foi possível operar o serviço.")
-			return 1
-		}
-		if goos == "windows" {
-			fmt.Fprintln(errW, "O Windows não tem serviço neste corte.")
-			return 1
-		}
-		if len(args) < 2 {
-			fmt.Fprintln(errW, "uso: herdr-recall service install [--dry-run] | uninstall | doctor")
-			return 2
-		}
-		exe, err := os.Executable()
-		if err != nil {
-			fmt.Fprintln(errW, "Não foi possível operar o serviço.")
-			return 1
-		}
-		return serviceCommand(args[1:], out, errW, agent.NewManager(goos, home, exe, os.Getenv("USER"), os.Getuid()))
-	case "restore":
-		if homeErr != nil {
-			fmt.Fprintln(errW, "Não foi possível montar a mesa.")
-			return 1
-		}
-		path := filepath.Join(home, ".local", "state", "herdr-recall", "latest.json")
-		err := restoreCommand(args[1:], out, errW, path, herdrRun)
-		return restoreExit(err)
-	default:
-		fmt.Fprintln(out, "herdr-recall")
-		return 0
-	}
-}
-
-func errorsIsUsage(err error) bool {
-	return err == errUsage
 }

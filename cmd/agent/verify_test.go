@@ -15,7 +15,7 @@ import (
 
 func TestVerifyRejectsInvalidArgumentsWithoutWriting(t *testing.T) {
 	var out, errW bytes.Buffer
-	if code := verifyCommand([]string{"--invalid"}, &out, &errW, t.TempDir(), "linux"); code != 2 {
+	if code := dispatch([]string{"verify", "--invalid"}, nil, &out, &errW, t.TempDir(), nil, nil, "linux"); code != 2 {
 		t.Fatalf("exit: %d", code)
 	}
 	if !strings.Contains(errW.String(), "verify") {
@@ -45,7 +45,7 @@ func TestVerifySendUsesCaptureAndFIFO(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errW bytes.Buffer
-	if code := verifyCommand([]string{"--send"}, &out, &errW, home, "linux"); code != 0 {
+	if code := verifyCommand(true, &out, &errW, home, "linux"); code != 0 {
 		t.Fatalf("verify: %d %s", code, errW.String())
 	}
 	if strings.Join(paths, ",") != "/v1/presence,/v1/snapshots" || !strings.Contains(out.String(), "Painel e restauração não foram verificados") {
@@ -76,7 +76,7 @@ func TestVerifySendConflictReturnsFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errW bytes.Buffer
-	if code := verifyCommand([]string{"--send"}, &out, &errW, home, "linux"); code == 0 {
+	if code := verifyCommand(true, &out, &errW, home, "linux"); code == 0 {
 		t.Fatal("conflito retornou sucesso")
 	}
 	if !strings.Contains(errW.String(), "quarentena") || strings.Contains(out.String(), "confirmada pelo servidor") {
@@ -86,7 +86,7 @@ func TestVerifySendConflictReturnsFailure(t *testing.T) {
 
 func TestVerifyDefaultDoesNotClaimDelivery(t *testing.T) {
 	var out, errW bytes.Buffer
-	verifyCommand(nil, &out, &errW, t.TempDir(), "linux")
+	verifyCommand(false, &out, &errW, t.TempDir(), "linux")
 	if !strings.Contains(out.String(), "não comprova entrega") || !strings.Contains(out.String(), "verify --send") {
 		t.Fatal("limites ou instrução ausentes")
 	}

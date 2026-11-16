@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,25 +15,6 @@ import (
 )
 
 var errUsage = errors.New("uso")
-
-func enroll(args []string, out, errW io.Writer, paths agent.Paths, client *http.Client, unit bool) error {
-	flags := flag.NewFlagSet("enroll", flag.ContinueOnError)
-	flags.SetOutput(errW)
-	api := flags.String("api", "", "URL do servidor")
-	code := flags.String("code", "", "código de uso único")
-	name := flags.String("name", "", "nome da máquina")
-	flags.Usage = func() {
-		fmt.Fprintln(errW, "uso: herdr-recall enroll --api URL --code CODIGO --name NOME")
-	}
-	if err := flags.Parse(args); err != nil {
-		return errUsage
-	}
-	if *api == "" || *code == "" || *name == "" || len(flags.Args()) > 0 {
-		flags.Usage()
-		return errUsage
-	}
-	return exchange(out, errW, paths, *api, *code, *name, client, unit)
-}
 
 func exchange(out, errW io.Writer, paths agent.Paths, api string, code string, name string, client *http.Client, unit bool) error {
 	if _, err := agent.Load(paths.Config); err != nil && !errors.Is(err, os.ErrNotExist) {

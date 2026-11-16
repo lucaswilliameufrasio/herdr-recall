@@ -15,7 +15,7 @@ import (
 func TestCaptureCommandHidesTheSessionFromTheLog(t *testing.T) {
 	dir := t.TempDir()
 	var out, errW bytes.Buffer
-	code := captureCommand(nil, &out, &errW, agent.CaptureOptions{
+	code := captureCommand(&out, &errW, agent.CaptureOptions{
 		StateDir: dir,
 		Host:     "desk",
 		BootID:   "boot-1",
@@ -57,7 +57,7 @@ func TestCaptureCommandKeepsThePreviousFileWhenHerdrIsDown(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errW bytes.Buffer
-	code := captureCommand(nil, &out, &errW, agent.CaptureOptions{
+	code := captureCommand(&out, &errW, agent.CaptureOptions{
 		StateDir: dir,
 		Host:     "desk",
 		BootID:   "boot-1",
@@ -82,7 +82,7 @@ func TestCaptureCommandKeepsThePreviousFileWhenHerdrIsDown(t *testing.T) {
 
 func TestCaptureCommandRejectsExtraArguments(t *testing.T) {
 	var out, errW bytes.Buffer
-	code := captureCommand([]string{"agora"}, &out, &errW, agent.CaptureOptions{})
+	code := dispatch([]string{"capture", "agora"}, nil, &out, &errW, t.TempDir(), nil, nil, "linux")
 	if code != 2 || !strings.Contains(errW.String(), "uso: herdr-recall capture") {
 		t.Fatalf("code=%d err=%q", code, errW.String())
 	}

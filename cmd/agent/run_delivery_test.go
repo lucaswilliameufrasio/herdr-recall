@@ -32,7 +32,7 @@ func TestRunReturnsThreeWhenDeviceIsRevoked(t *testing.T) {
 		},
 	}
 	var log bytes.Buffer
-	if code := runCommand(nil, &log, opt, home); code != 3 {
+	if code := runCommand(&log, opt, home); code != 3 {
 		t.Fatalf("código de saída: %d", code)
 	}
 }

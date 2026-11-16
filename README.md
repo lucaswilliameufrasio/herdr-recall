@@ -14,7 +14,25 @@ O instalador externo seleciona Linux ou macOS e amd64 ou arm64, baixa o pacote c
 curl --proto '=https' --tlsv1.2 -fsSL https://github.com/lucaswilliameufrasio/herdr-recall/releases/latest/download/herdr-recall-installer.sh | sh
 ```
 
-O checksum detecta corrupção no download, mas não protege se o pacote e o checksum da release forem ambos substituídos. O instalador copia os dois binários para `~/.local/bin`, sem substituir arquivos existentes; não usa sudo, não altera o PATH nem inicia serviços.
+O checksum detecta corrupção no download, mas não protege se o pacote e o checksum da release forem ambos substituídos. O instalador copia os dois binários para `~/.local/bin`; não usa sudo, não altera o PATH nem inicia serviços.
+
+A partir da v0.4.0 o instalador compara a versão do pacote com a instalada:
+
+| Situação | O que acontece |
+|---|---|
+| Nada instalado | instala |
+| Pacote mais novo | atualiza os dois binários, cada um com uma renomeação atômica |
+| Mesma versão | não altera nada e sai com sucesso |
+| Pacote mais antigo | recusa; `--allow-downgrade` aceita e avisa |
+| Instalada sem versão (v0.3.0 ou anterior, ou build local) | recusa; `--force` substitui |
+
+Com `curl | sh`, passe as opções depois de `sh -s --`. Por exemplo, para sair da v0.3.0:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/lucaswilliameufrasio/herdr-recall/releases/latest/download/herdr-recall-installer.sh | sh -s -- --force
+```
+
+Depois de instalada, a v0.4.0 se atualiza sozinha com `herdr-recall update` (`--check` só consulta; `--restart` reinicia o serviço). O serviço continua com o binário antigo até reiniciar, e os dois comandos avisam isso.
 
 **Enquanto isso, a v0.2.0 pode ser instalada manualmente:**
 
@@ -35,7 +53,22 @@ O checksum detecta corrupção no download, mas não protege se o pacote e o che
    sh herdr-recall-pacote/install.sh
    ```
 
-   A mensagem `Binários instalados. Nenhum serviço foi instalado ou iniciado.` confirma a cópia. Se o destino já existir, nada é substituído; para instalar outra versão ao lado, escolha um diretório novo com `sh herdr-recall-pacote/install.sh --bin-dir "$HOME/herdr-recall-novo/bin"` e use esse caminho explicitamente.
+   A mensagem `herdr-recall vX.Y.Z instalado em …` confirma a cópia. Se já houver uma instalação, valem as regras da tabela acima (`--allow-downgrade`, `--force`). Para instalar outra versão ao lado, escolha um diretório novo com `sh herdr-recall-pacote/install.sh --bin-dir "$HOME/herdr-recall-novo/bin"` e use esse caminho explicitamente.
+
+### Comandos
+
+`herdr-recall --help` lista tudo; cada comando tem `--help` com exemplos. Num terminal, `herdr-recall` sem argumentos abre a TUI: capturas à esquerda, panes à direita, `/` filtra, `c` copia o comando (OSC52, nada é executado) e `r` monta a captura numa sessão nomeada vazia, mostrando o plano antes.
+
+| Grupo | Comandos |
+|---|---|
+| Começo | `setup`, `enroll`, `status` (resumo com os checks do doctor; `--json`) |
+| Mesa | `latest` (`--json`, `--workspace`, `--harness`), `history` e `history show N`, `restore --session NOME [--plan] [--from N]`, `capture` |
+| Agente e diagnóstico | `service install/uninstall/doctor`, `run`, `verify [--send]`, `queue` (só metadados da fila e da quarentena), `logs [-f]`, `config [show/path]` |
+| Manutenção | `update`, `uninstall [--dry-run] [--purge]`, `version`, `completion bash/zsh/fish` |
+
+Uso inválido sai com código 2. `status` e `queue` saem com 1 quando há falha ou quarentena. Fora de um terminal, as cores somem; `NO_COLOR` também as desliga.
+
+Para o autocompletar no Fish: `herdr-recall completion fish > ~/.config/fish/completions/herdr-recall.fish`.
 
 ### Primeira execução na mesma máquina
 
@@ -55,7 +88,7 @@ Não há instalador para Windows. Os binários de macOS não foram notarizados; 
 
 ### Preparar uma release
 
-Com o checkout limpo e o commit desejado já revisado, `sh scripts/package-release.sh vX.Y.Z /caminho/novo/para/pacotes` gera os quatro arquivos, `SHA256SUMS`, o instalador externo, `COMMIT` e um modelo `RELEASE-NOTES.md` com instalação e tabela de downloads. O diretório de saída não pode existir. Confira os pacotes e checksums, acrescente ao modelo as mudanças e os testes efetivamente realizados e publique somente com autorização. `--allow-dirty` existe apenas para ensaios: gera `LOCAL-ONLY`, e os arquivos resultantes não devem ser publicados. O script não cria tag nem publica release.
+Com o checkout limpo e o commit desejado já revisado, `sh scripts/package-release.sh vX.Y.Z /caminho/novo/para/pacotes` grava a versão, o commit e a data do commit nos binários (`herdr-recall --version` imprime `herdr-recall vX.Y.Z`, que o instalador lê) e gera os quatro arquivos, `SHA256SUMS`, o instalador externo, `COMMIT` e um modelo `RELEASE-NOTES.md` com instalação e tabela de downloads. O diretório de saída não pode existir. Confira os pacotes e checksums, acrescente ao modelo as mudanças e os testes efetivamente realizados e publique somente com autorização. `--allow-dirty` existe apenas para ensaios: gera `LOCAL-ONLY`, e os arquivos resultantes não devem ser publicados. O script não cria tag nem publica release.
 
 `herdr-recall-server` usa por padrão o banco privado `~/.local/state/herdr-recall-server/server.db` e aceita `--bind` e `--db`. O listener sem TLS é restrito a loopback; um proxy externo pode terminar TLS e encaminhar ao endereço local.
 

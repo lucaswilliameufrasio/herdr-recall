@@ -1,37 +1,41 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
 	"herdr-recall/internal/contract"
 )
 
-func run(args []string, out, log io.Writer, latestPath string) error {
-	if len(args) > 0 && args[0] == "latest" {
-		return printLatest(out, log, latestPath)
-	}
-	fmt.Fprintln(out, "herdr-recall")
-	return nil
+type latestOptions struct {
+	JSON      bool
+	Workspace string
+	Harness   string
 }
 
-func defaultLatestPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+func (o latestOptions) keep(pane contract.Pane) bool {
+	if o.Workspace != "" && !strings.Contains(strings.ToLower(pane.WorkspaceLabel), strings.ToLower(o.Workspace)) {
+		return false
 	}
-	return filepath.Join(home, ".local", "state", "herdr-recall", "latest.json"), nil
+	if o.Harness != "" && !strings.EqualFold(pane.Harness, o.Harness) {
+		return false
+	}
+	return true
 }
 
-func printLatest(out, log io.Writer, path string) error {
+func printLatest(out, log io.Writer, path string, opts latestOptions) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintln(out, "Nenhum pane nesta captura.")
+			if opts.JSON {
+				fmt.Fprintln(out, "null")
+			} else {
+				fmt.Fprintln(out, "Nenhum pane nesta captura.")
+			}
 			fmt.Fprintln(log, "latest panes=0")
 			return nil
 		}
@@ -40,6 +44,29 @@ func printLatest(out, log io.Writer, path string) error {
 	snap, err := contract.ValidateSnapshot(raw)
 	if err != nil {
 		return err
+	}
+	return printDesk(out, log, snap, opts)
+}
+
+func printDesk(out, log io.Writer, snap contract.Snapshot, opts latestOptions) error {
+	panes := snap.Panes[:0:0]
+	for _, pane := range snap.Panes {
+		if opts.keep(pane) {
+			panes = append(panes, pane)
+		}
+	}
+	snap.Panes = panes
+	if opts.JSON {
+		if snap.Panes == nil {
+			snap.Panes = []contract.Pane{}
+		}
+		encoder := json.NewEncoder(out)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(snap); err != nil {
+			return err
+		}
+		fmt.Fprintf(log, "latest panes=%d\n", len(snap.Panes))
+		return nil
 	}
 	if len(snap.Panes) == 0 {
 		fmt.Fprintln(out, "Nenhum pane nesta captura.")

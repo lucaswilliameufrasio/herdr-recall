@@ -54,7 +54,7 @@ func TestLatestPrintsTheDeskWithoutTheServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, log bytes.Buffer
-	if err := run([]string{"latest"}, &out, &log, path); err != nil {
+	if err := printLatest(&out, &log, path, latestOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	text := out.String()
@@ -84,26 +84,13 @@ func TestLatestPrintsTheDeskWithoutTheServer(t *testing.T) {
 
 func TestLatestWithoutADesk(t *testing.T) {
 	var out, log bytes.Buffer
-	if err := run([]string{"latest"}, &out, &log, filepath.Join(t.TempDir(), "latest.json")); err != nil {
+	if err := printLatest(&out, &log, filepath.Join(t.TempDir(), "latest.json"), latestOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if out.String() != "Nenhum pane nesta captura.\n" {
 		t.Fatalf("stdout: %q", out.String())
 	}
 	if strings.Contains(log.String(), "opencode") || strings.Contains(log.String(), "--session") {
-		t.Fatalf("log: %q", log.String())
-	}
-}
-
-func TestRunWithoutLatestStaysLocal(t *testing.T) {
-	var out, log bytes.Buffer
-	if err := run(nil, &out, &log, ""); err != nil {
-		t.Fatal(err)
-	}
-	if out.String() != "herdr-recall\n" {
-		t.Fatalf("stdout: %q", out.String())
-	}
-	if log.Len() != 0 {
 		t.Fatalf("log: %q", log.String())
 	}
 }

@@ -11,11 +11,7 @@ import (
 	"herdr-recall/internal/agent"
 )
 
-func setup(args []string, in io.Reader, out, errW io.Writer, paths agent.Paths, client *http.Client, unit bool) error {
-	if len(args) > 0 {
-		fmt.Fprintln(errW, "uso: herdr-recall setup")
-		return errUsage
-	}
+func setup(in io.Reader, out, errW io.Writer, paths agent.Paths, client *http.Client, unit bool) error {
 	saved, err := agent.Load(paths.Config)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

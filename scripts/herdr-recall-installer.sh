@@ -5,8 +5,11 @@ set -eu
 tag='@RELEASE_TAG@'
 bin_dir="${HOME:?HOME não definido}/.local/bin"
 
+install_flags=''
+
 usage() {
-  printf '%s\n' 'Uso: sh herdr-recall-installer.sh [--tag vX.Y.Z] [--bin-dir DIRETÓRIO]'
+  printf '%s\n' 'Uso: sh herdr-recall-installer.sh [--tag vX.Y.Z] [--bin-dir DIRETÓRIO] [--allow-downgrade] [--force]'
+  printf '%s\n' 'Com curl | sh, passe as opções depois de -s --: curl ... | sh -s -- --force'
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -18,6 +21,7 @@ while [ "$#" -gt 0 ]; do
       if [ "$1" = "--tag" ]; then tag=$2; else bin_dir=$2; fi
       shift 2
       ;;
+    --allow-downgrade|--force) install_flags="$install_flags $1"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
@@ -36,12 +40,6 @@ case "$(uname -m)" in
   arm64|aarch64) arch=arm64 ;;
   *) printf '%s\n' 'Arquitetura não suportada.' >&2; exit 1 ;;
 esac
-for name in herdr-recall herdr-recall-server; do
-  if [ -e "$bin_dir/$name" ] || [ -L "$bin_dir/$name" ]; then
-    printf 'Destino já existe; nada foi instalado: %s\n' "$name" >&2
-    exit 1
-  fi
-done
 if ! command -v curl >/dev/null 2>&1; then
   printf '%s\n' 'curl é necessário para baixar a release.' >&2
   exit 1
@@ -85,5 +83,11 @@ for name in herdr-recall herdr-recall-server install.sh; do
   fi
 done
 chmod 700 "$tmp/herdr-recall" "$tmp/herdr-recall-server"
+reported=$("$tmp/herdr-recall" --version 2>/dev/null | head -n 1) || reported=''
+if [ "$reported" != "herdr-recall $tag" ]; then
+  printf 'O pacote %s não informa a versão %s; nada foi instalado.\n' "$archive" "$tag" >&2
+  exit 1
+fi
 printf 'Pacote %s verificado por SHA-256.\n' "$archive"
-sh "$tmp/install.sh" --bin-dir "$bin_dir"
+# shellcheck disable=SC2086
+sh "$tmp/install.sh" --bin-dir "$bin_dir" $install_flags

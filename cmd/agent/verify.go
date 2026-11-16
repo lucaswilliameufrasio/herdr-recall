@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -11,22 +10,8 @@ import (
 	"herdr-recall/internal/agent"
 )
 
-func verifyCommand(args []string, out, errW io.Writer, home, goos string) int {
-	flags := flag.NewFlagSet("verify", flag.ContinueOnError)
-	flags.SetOutput(errW)
-	send := flags.Bool("send", false, "grava uma captura real e envia a fila até ela")
-	flags.Usage = func() {
-		fmt.Fprintln(errW, "uso: herdr-recall verify [--send]")
-		fmt.Fprintln(errW, "--send grava uma captura real e envia também os itens anteriores da fila.")
-	}
-	if err := flags.Parse(args); err != nil {
-		return 2
-	}
-	if len(flags.Args()) != 0 {
-		flags.Usage()
-		return 2
-	}
-	if !*send {
+func verifyCommand(send bool, out, errW io.Writer, home, goos string) int {
+	if !send {
 		exe, err := os.Executable()
 		if err != nil {
 			fmt.Fprintln(errW, "Não foi possível verificar esta máquina.")

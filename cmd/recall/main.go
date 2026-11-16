@@ -26,8 +26,11 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, os.Args[1:], home, os.Getenv("RECALL_SETUP_TOKEN"), os.Stderr, net.Listen); err != nil {
+	if err := run(ctx, os.Args[1:], home, os.Getenv("RECALL_SETUP_TOKEN"), versionOutput(os.Args[1:]), net.Listen); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
+		if errors.Is(err, errVersion) {
 			return
 		}
 		fmt.Fprintln(os.Stderr, "Não foi possível iniciar o servidor.")
@@ -35,13 +38,23 @@ func main() {
 	}
 }
 
+// Filled by package-release.sh through -ldflags "-X main.version=vX.Y.Z".
+var version = "dev"
+
+var errVersion = errors.New("versão")
+
 func run(ctx context.Context, args []string, home, setupToken string, output io.Writer, listen func(string, string) (net.Listener, error)) error {
 	flags := flag.NewFlagSet("herdr-recall-server", flag.ContinueOnError)
 	flags.SetOutput(output)
 	bind := flags.String("bind", "127.0.0.1:8788", "endereço local do servidor")
 	database := flags.String("db", filepath.Join(home, ".local", "state", "herdr-recall-server", "server.db"), "arquivo SQLite privado")
+	showVersion := flags.Bool("version", false, "mostra a versão e sai")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *showVersion {
+		fmt.Fprintln(output, "herdr-recall-server "+version)
+		return errVersion
 	}
 	if len(flags.Args()) != 0 || !loopbackBind(*bind) || *database == "" {
 		return errors.New("parâmetros inválidos")
@@ -122,4 +135,15 @@ func prepareDatabase(path string) error {
 		return errors.New("arquivo de banco não é privado")
 	}
 	return nil
+}
+
+// versionOutput sends --version to stdout, where scripts read it; everything
+// else keeps going to stderr.
+func versionOutput(args []string) io.Writer {
+	for _, arg := range args {
+		if arg == "--version" || arg == "-version" {
+			return os.Stdout
+		}
+	}
+	return os.Stderr
 }

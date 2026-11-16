@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -11,19 +10,7 @@ import (
 	"herdr-recall/internal/agent"
 )
 
-func captureCommand(args []string, out, errW io.Writer, opt agent.CaptureOptions) int {
-	flags := flag.NewFlagSet("capture", flag.ContinueOnError)
-	flags.SetOutput(errW)
-	flags.Usage = func() {
-		fmt.Fprintln(errW, "uso: herdr-recall capture")
-	}
-	if err := flags.Parse(args); err != nil {
-		return 2
-	}
-	if len(flags.Args()) > 0 {
-		flags.Usage()
-		return 2
-	}
+func captureCommand(out, errW io.Writer, opt agent.CaptureOptions) int {
 	if opt.StateDir == "" || opt.BootID == "" || opt.Host == "" {
 		fmt.Fprintln(errW, "Não foi possível gravar a captura.")
 		return 1

@@ -36,7 +36,7 @@ func TestBootstrapVerifiesBeforeInstalling(t *testing.T) {
 			gz := gzip.NewWriter(&archive)
 			tw := tar.NewWriter(gz)
 			for name, content := range map[string][]byte{
-				"herdr-recall": []byte("synthetic-agent"), "herdr-recall-server": []byte("synthetic-server"), "install.sh": installer,
+				"herdr-recall": fakeBinary("herdr-recall", "v9.8.7"), "herdr-recall-server": fakeBinary("herdr-recall-server", "v9.8.7"), "install.sh": installer,
 			} {
 				if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(content))}); err != nil {
 					t.Fatal(err)

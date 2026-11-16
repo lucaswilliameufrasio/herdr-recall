@@ -3,53 +3,67 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"herdr-recall/internal/agent"
 	"herdr-recall/internal/contract"
 )
 
-func restoreCommand(args []string, out, errW io.Writer, latestPath string, run agent.Runner) error {
-	flags := flag.NewFlagSet("restore", flag.ContinueOnError)
-	flags.SetOutput(errW)
-	session := flags.String("session", "", "sessão nomeada vazia")
-	plan := flags.Bool("plan", false, "mostra o plano sem criar pane")
-	flags.Usage = func() {
-		fmt.Fprintln(errW, "uso: herdr-recall restore --session NOME [--plan]")
+// deskSource picks the desk to restore: latest.json, or entry N of the history.
+type deskSource struct {
+	latest     string
+	historyDir string
+	from       int
+}
+
+var errHistoryIndex = errors.New("índice do histórico")
+
+func (s deskSource) load() (contract.Snapshot, bool, error) {
+	if s.from <= 0 {
+		raw, err := os.ReadFile(s.latest)
+		if os.IsNotExist(err) {
+			return contract.Snapshot{}, false, nil
+		}
+		if err != nil {
+			return contract.Snapshot{}, false, err
+		}
+		desk, err := contract.ValidateSnapshot(raw)
+		return desk, err == nil, err
 	}
-	if err := flags.Parse(args); err != nil {
-		return errUsage
+	entries, err := agent.ReadHistory(filepath.Dir(s.historyDir))
+	if err != nil {
+		return contract.Snapshot{}, false, err
 	}
-	if *session == "" || len(flags.Args()) > 0 {
-		flags.Usage()
-		return errUsage
+	if s.from > len(entries) {
+		return contract.Snapshot{}, false, errHistoryIndex
 	}
-	if err := agent.RejectSession(*session); err != nil {
+	desk, err := entries[s.from-1].Snapshot()
+	return desk, err == nil, err
+}
+
+func restoreCommand(session string, plan bool, out, errW io.Writer, source deskSource, run agent.Runner) error {
+	if err := agent.RejectSession(session); err != nil {
 		fmt.Fprintln(errW, restoreMessage(err))
 		return err
 	}
-	raw, err := os.ReadFile(latestPath)
+	desk, found, err := source.load()
+	if errors.Is(err, errHistoryIndex) {
+		fmt.Fprintf(errW, "O histórico não tem a captura %d. Veja herdr-recall history.\n", source.from)
+		return errUsage
+	}
 	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Fprintln(out, "Nenhum pane nesta captura.")
-			fmt.Fprintln(errW, "restore panes=0")
-			return nil
-		}
+		fmt.Fprintln(errW, "Não foi possível ler a captura.")
 		return err
 	}
-	desk, err := contract.ValidateSnapshot(raw)
-	if err != nil {
-		return err
-	}
-	if len(desk.Panes) == 0 && len(desk.Layouts) == 0 {
+	if !found || (len(desk.Panes) == 0 && len(desk.Layouts) == 0) {
 		fmt.Fprintln(out, "Nenhum pane nesta captura.")
 		fmt.Fprintln(errW, "restore panes=0")
 		return nil
 	}
-	report, err := agent.Restore(context.Background(), *session, desk, *plan, run)
+	report, err := agent.Restore(context.Background(), session, desk, plan, run)
 	if err != nil {
 		fmt.Fprintln(errW, restoreMessage(err))
 		return err
