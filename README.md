@@ -8,15 +8,54 @@ O servidor escuta em `127.0.0.1:8788`. O executável do agente é `herdr-recall`
 
 ### Instalação
 
-Baixe o pacote da release correspondente ao sistema e à arquitetura e confira seu SHA-256 com o arquivo `SHA256SUMS` da mesma release. Extraia o pacote e, dentro do diretório extraído, execute:
+O instalador externo seleciona Linux ou macOS e amd64 ou arm64, baixa o pacote correspondente e verifica seu SHA-256. Ele está disponível a partir da v0.3.0; a v0.2.0 não o possui:
 
 ```sh
-sh install.sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/lucaswilliameufrasio/herdr-recall/releases/latest/download/herdr-recall-installer.sh | sh
 ```
 
-O instalador copia os dois binários para `~/.local/bin`, sem substituir arquivos existentes. Para outro destino, use `sh install.sh --bin-dir /caminho/para/bin`. Ele não usa sudo, não altera o PATH e não instala nem inicia o serviço. Depois, inclua o diretório no PATH se necessário e execute `herdr-recall setup`; `herdr-recall service install` é uma etapa separada.
+O checksum detecta corrupção no download, mas não protege se o pacote e o checksum da release forem ambos substituídos. O instalador copia os dois binários para `~/.local/bin`, sem substituir arquivos existentes; não usa sudo, não altera o PATH nem inicia serviços.
 
-O instalador está nos pacotes a partir da `v0.2.0`; os pacotes já publicados como `v0.1.0` não o contêm.
+**Enquanto isso, a v0.2.0 pode ser instalada manualmente:**
+
+1. Abra [a release v0.2.0](https://github.com/lucaswilliameufrasio/herdr-recall/releases/tag/v0.2.0), baixe `SHA256SUMS` e o arquivo adequado: `linux-amd64` (Linux x64), `linux-arm64` (Linux ARM64), `darwin-amd64` (Mac Intel) ou `darwin-arm64` (Apple Silicon).
+2. No terminal, entre no diretório dos downloads. Substitua `ARQUIVO` abaixo pelo nome exato do pacote baixado e confira se os dois hashes são iguais:
+
+   ```sh
+   grep 'ARQUIVO' SHA256SUMS
+   shasum -a 256 ARQUIVO
+   ```
+
+   No Linux, se `shasum` não estiver disponível, use `sha256sum ARQUIVO`. Se os hashes diferirem, pare: não extraia nem instale.
+3. Extraia para uma pasta nova e instale, substituindo `ARQUIVO`:
+
+   ```sh
+   mkdir herdr-recall-pacote
+   tar -xzf ARQUIVO -C herdr-recall-pacote
+   sh herdr-recall-pacote/install.sh
+   ```
+
+   A mensagem `Binários instalados. Nenhum serviço foi instalado ou iniciado.` confirma a cópia. Se o destino já existir, nada é substituído; para instalar outra versão ao lado, escolha um diretório novo com `sh herdr-recall-pacote/install.sh --bin-dir "$HOME/herdr-recall-novo/bin"` e use esse caminho explicitamente.
+
+### Primeira execução na mesma máquina
+
+Esta sequência usa o servidor local e requer o Herdr instalado e em execução. O servidor permanece em primeiro plano; a instalação não cria serviço para ele.
+
+1. Confira que os binários estão no PATH. No Bash/Zsh use `export PATH="$HOME/.local/bin:$PATH"`; no Fish use `fish_add_path ~/.local/bin` (persiste no Fish). Para outro diretório de instalação, use o caminho completo dos binários.
+2. Em um terminal, inicie `herdr-recall-server`. Ele cria o banco privado em `~/.local/state/herdr-recall-server/server.db`; deixe esse terminal aberto. Em outro terminal, `curl -fsS http://127.0.0.1:8788/healthz` deve responder `ok`. Se falhar, não continue.
+3. Abra `http://127.0.0.1:8788/acesso/setup` no navegador da mesma máquina. Crie a senha do operador com pelo menos 12 caracteres e no máximo 72 bytes; depois abra o link **Entrar** e autentique-se. O setup inicial só funciona antes da criação do operador.
+4. No painel, clique **Gerar código**. Guarde o código sem compartilhá-lo; ele vale por 10 minutos e só pode ser usado uma vez.
+5. Em outro terminal, rode `herdr-recall setup`. Em **URL do servidor**, digite `http://127.0.0.1:8788`; em **Código**, digite o código do painel; em **Nome da máquina**, escolha um nome. O comando grava configuração e token privados; não instale o serviço se o enrolamento falhar.
+6. Rode `herdr-recall service install --dry-run` para inspecionar a unidade sem gravar. Depois, se quiser que o agente rode em segundo plano, execute `herdr-recall service install`. Isso instala o serviço **do agente**, não o do servidor.
+7. Rode `herdr-recall service doctor`. Verifique os resultados `ok`; corrija qualquer `fail` antes de continuar. Para provocar uma captura e envio reais, rode explicitamente `herdr-recall verify --send`: isso grava e envia a mesa e a fila anterior. Volte ao painel e abra a máquina para conferir a captura. Esse comando não testa restauração.
+
+Para um agente em outra máquina, `127.0.0.1` aponta para a própria máquina do agente, não para o servidor. O servidor aceita apenas loopback; use um proxy TLS ou túnel seguro configurado para alcançar o servidor e informe no setup a URL acessível ao agente. Configurar e proteger esse acesso é uma etapa separada; não exponha o listener HTTP diretamente.
+
+Não há instalador para Windows. Os binários de macOS não foram notarizados; se o macOS bloquear a execução, examine o aviso e a procedência do arquivo antes de decidir como proceder, sem desativar proteções globalmente.
+
+### Preparar uma release
+
+Com o checkout limpo e o commit desejado já revisado, `sh scripts/package-release.sh vX.Y.Z /caminho/novo/para/pacotes` gera os quatro arquivos, `SHA256SUMS`, o instalador externo, `COMMIT` e um modelo `RELEASE-NOTES.md` com instalação e tabela de downloads. O diretório de saída não pode existir. Confira os pacotes e checksums, acrescente ao modelo as mudanças e os testes efetivamente realizados e publique somente com autorização. `--allow-dirty` existe apenas para ensaios: gera `LOCAL-ONLY`, e os arquivos resultantes não devem ser publicados. O script não cria tag nem publica release.
 
 `herdr-recall-server` usa por padrão o banco privado `~/.local/state/herdr-recall-server/server.db` e aceita `--bind` e `--db`. O listener sem TLS é restrito a loopback; um proxy externo pode terminar TLS e encaminhar ao endereço local.
 
