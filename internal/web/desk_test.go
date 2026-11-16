@@ -23,7 +23,23 @@ func TestRenderDeskEscapesDataAndRequiresAllowedCommand(t *testing.T) {
 			t.Errorf("texto ausente: %s", want)
 		}
 	}
-	if strings.Contains(html, "<script>") || strings.Count(html, "data-argv=") != 1 {
+	if strings.Contains(html, "<script>") || strings.Count(html, "data-argv=") != 2 {
 		t.Fatal("conteúdo inseguro ou comando inválido")
+	}
+}
+
+func TestMobileCardsShowAmbiguityAndMissingSession(t *testing.T) {
+	detail := Detail{HasSnapshot: true, Panes: []DeskPane{
+		{Pane: "um", Confidence: "baixa", Ambiguous: true, Command: "'opencode' '--session' 'ses_123'"},
+		{Pane: "dois", Confidence: "baixa"},
+	}}
+	var out bytes.Buffer
+	if err := RenderDetailPage(&out, "csrf", detail); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`class="pane-cards"`, `class="pane-card ambiguous"`, "A mesma sessão aparece em mais de um pane. Confira antes de colar.", "Sem sessão para restaurar."} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("ausente: %s", want)
+		}
 	}
 }

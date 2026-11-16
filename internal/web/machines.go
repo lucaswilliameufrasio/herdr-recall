@@ -12,11 +12,14 @@ type Machine struct {
 	Freshness string
 	Boot      string
 	PaneCount int
+	Revoked   bool
 }
 
 type Boot struct {
 	ID            string
 	FirstReceived string
+	Selected      bool
+	Previous      bool
 }
 
 type PresenceSlot struct {
@@ -38,6 +41,7 @@ type Detail struct {
 	HasSnapshot bool
 	Panes       []DeskPane
 	Presence    PresenceChart
+	Revoked     bool
 }
 
 // Chart anchors the window on the observed timestamp of the latest received

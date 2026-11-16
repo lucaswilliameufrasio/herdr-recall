@@ -3,6 +3,10 @@
 for (const button of document.querySelectorAll("button[data-argv]")) {
   button.addEventListener("click", async () => {
     const result = button.parentElement.querySelector(".copy-result");
+    if (button.getAttribute("aria-busy") === "true") {
+      return;
+    }
+    button.setAttribute("aria-busy", "true");
     try {
       await navigator.clipboard.writeText(button.dataset.argv);
       result.textContent = "Comando copiado. Nada foi executado.";
@@ -11,6 +15,8 @@ for (const button of document.querySelectorAll("button[data-argv]")) {
       }, 2000);
     } catch (error) {
       result.textContent = "Não foi possível copiar. Selecione o comando.";
+    } finally {
+      button.removeAttribute("aria-busy");
     }
   });
 }

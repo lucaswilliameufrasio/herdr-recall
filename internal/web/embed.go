@@ -20,6 +20,8 @@ type shellData struct {
 	Page     string
 	Machines []Machine
 	Detail   Detail
+	Code     string
+	Expires  string
 }
 
 // Asset returns an embedded public asset and its content type.
@@ -73,6 +75,24 @@ func RenderDetailPage(w io.Writer, csrf string, detail Detail) error {
 		return err
 	}
 	return tpl.ExecuteTemplate(w, "shell.html", shellData{Name: ProductName, CSRF: csrf, Page: "detail", Detail: detail})
+}
+
+// RenderErrorPage renders a generic error without exposing database details.
+func RenderErrorPage(w io.Writer, csrf string) error {
+	tpl, err := shellTemplate()
+	if err != nil {
+		return err
+	}
+	return tpl.ExecuteTemplate(w, "shell.html", shellData{Name: ProductName, CSRF: csrf, Page: "error"})
+}
+
+// RenderEnrollmentCode displays a newly generated code once, without a URL parameter.
+func RenderEnrollmentCode(w io.Writer, csrf, code, expires string) error {
+	tpl, err := shellTemplate()
+	if err != nil {
+		return err
+	}
+	return tpl.ExecuteTemplate(w, "shell.html", shellData{Name: ProductName, CSRF: csrf, Page: "code", Code: code, Expires: expires})
 }
 
 func shellTemplate() (*template.Template, error) {

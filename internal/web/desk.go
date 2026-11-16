@@ -16,6 +16,7 @@ type DeskPane struct {
 	Session    string
 	Confidence string
 	Command    string
+	Ambiguous  bool
 }
 
 // DeskPanes prepares the values displayed in a restore table.
@@ -29,6 +30,7 @@ func DeskPanes(snapshot contract.Snapshot) []DeskPane {
 			Directory: pane.Cwd,
 			Harness:   pane.Harness,
 			Session:   pane.SessionID,
+			Ambiguous: len(pane.AmbiguousWith) > 0,
 		}
 		switch pane.Confidence {
 		case contract.ConfidenceHigh:

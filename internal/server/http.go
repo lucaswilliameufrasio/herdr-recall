@@ -27,18 +27,29 @@ const (
 
 const setupForm = `<!DOCTYPE html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/assets/tokens.css">
+<link rel="stylesheet" href="/assets/components.css">
+<main class="shell">
 <form method="post" action="/acesso/setup">
-<label>Senha <input name="password" type="password" autocomplete="new-password"></label>
-<button type="submit">Criar</button>
+<label>Senha <input name="password" type="password" autocomplete="new-password" autofocus required></label>
+<label>Confirmar senha <input name="password_confirmation" type="password" autocomplete="new-password" required></label>
+<button class="button-secondary" type="submit">Criar</button>
 </form>
+</main>
 `
 
 const loginForm = `<!DOCTYPE html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/assets/tokens.css">
+<link rel="stylesheet" href="/assets/components.css">
+<main class="shell">
 <form method="post" action="/acesso/entrar">
-<label>Senha <input name="password" type="password" autocomplete="current-password"></label>
-<button type="submit">Entrar</button>
+<label>Senha <input name="password" type="password" autocomplete="current-password" autofocus></label>
+<button class="button-secondary" type="submit">Entrar</button>
 </form>
+</main>
 `
 
 // Options configures one process. Loopback is the bind, not the client.
@@ -169,11 +180,16 @@ func (s *Server) setupPost(w http.ResponseWriter, r *http.Request) {
 	if !s.allowSetup(w, r) {
 		return
 	}
-	password, ok := s.readPassword(w, r)
+	password, ok := s.readPassword(w, r, true)
 	if !ok {
 		return
 	}
 	if message, bad := passwordProblem(password); bad {
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+			form := strings.Replace(setupForm, "</form>", `<p role="alert">`+message+`</p></form>`, 1)
+			writeHTML(w, StatusUnprocessable, form)
+			return
+		}
 		writeError(w, StatusUnprocessable, codeInvalidParams, []contract.FieldError{{
 			Field:   "password",
 			Message: message,
@@ -194,6 +210,10 @@ func (s *Server) setupPost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, statusNotFound, codeNotFound, nil)
 		return
 	}
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		writeHTML(w, statusCreated, `<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/assets/tokens.css"><link rel="stylesheet" href="/assets/components.css"><main class="shell"><p>Operador criado.</p><p><a href="/acesso/entrar">Entrar</a></p></main>`)
+		return
+	}
 	w.WriteHeader(statusCreated)
 }
 
@@ -202,7 +222,7 @@ func (s *Server) loginGet(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) loginPost(w http.ResponseWriter, r *http.Request) {
-	password, ok := s.readPassword(w, r)
+	password, ok := s.readPassword(w, r, false)
 	if !ok {
 		return
 	}
@@ -218,6 +238,12 @@ func (s *Server) loginPost(w http.ResponseWriter, r *http.Request) {
 		_ = bcrypt.CompareHashAndPassword(dummyPasswordHash(), []byte(password))
 	}
 	if !match {
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+			form := strings.Replace(loginForm, `autocomplete="current-password"`, `autocomplete="current-password" aria-invalid="true" aria-describedby="login-error"`, 1)
+			form = strings.Replace(form, "</form>", `<p id="login-error" role="alert">Senha não confere.</p></form>`, 1)
+			writeHTML(w, statusUnauthorized, form)
+			return
+		}
 		writeError(w, statusUnauthorized, codeUnauthorized, nil)
 		return
 	}
@@ -237,6 +263,10 @@ func (s *Server) loginPost(w http.ResponseWriter, r *http.Request) {
 	}
 	s.setCookie(w, raw, sessionMaxAge)
 	w.Header().Set("Cache-Control", "no-store")
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"csrf": csrf})
 }
 
@@ -253,6 +283,11 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setCookie(w, "", -1)
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, "/acesso/entrar", http.StatusSeeOther)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -275,7 +310,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	}
 	machines, err := s.store.panelMachines(s.now())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
+		s.panelError(w, csrf)
 		return
 	}
 	var buf bytes.Buffer
@@ -312,6 +347,17 @@ func (s *Server) createCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		var buf bytes.Buffer
+		if err := web.RenderEnrollmentCode(&buf, csrf, raw, expires); err != nil {
+			s.panelError(w, csrf)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(statusCreated)
+		_, _ = w.Write(buf.Bytes())
+		return
+	}
 	writeJSON(w, statusCreated, map[string]string{
 		"code":       raw,
 		"expires_at": expires,
@@ -325,7 +371,7 @@ func (s *Server) machine(w http.ResponseWriter, r *http.Request) {
 	}
 	detail, found, err := s.store.panelDetail(r.PathValue("id"), r.URL.Query().Get("boot"), s.now())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
+		s.panelError(w, csrf)
 		return
 	}
 	if !found {
@@ -339,6 +385,18 @@ func (s *Server) machine(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(buf.Bytes())
+}
+
+func (s *Server) panelError(w http.ResponseWriter, csrf string) {
+	var buf bytes.Buffer
+	if err := web.RenderErrorPage(&buf, csrf); err != nil {
+		writeError(w, http.StatusInternalServerError, codeUnexpected, nil)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusInternalServerError)
 	_, _ = w.Write(buf.Bytes())
 }
 
@@ -555,7 +613,7 @@ func (s *Server) setCookie(w http.ResponseWriter, value string, maxAge int) {
 	})
 }
 
-func (s *Server) readPassword(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (s *Server) readPassword(w http.ResponseWriter, r *http.Request, confirm bool) (string, bool) {
 	raw, ok := readLimited(w, r, smallMax)
 	if !ok {
 		return "", false
@@ -581,6 +639,12 @@ func (s *Server) readPassword(w http.ResponseWriter, r *http.Request) (string, b
 			Field:   "body",
 			Message: "json inválido",
 		}})
+		return "", false
+	}
+	if confirm && values.Has("password_confirmation") && values.Get("password") != values.Get("password_confirmation") {
+		form := strings.Replace(setupForm, `name="password_confirmation"`, `name="password_confirmation" aria-invalid="true" aria-describedby="confirmation-error"`, 1)
+		form = strings.Replace(form, "</form>", `<p id="confirmation-error" role="alert">As senhas não conferem.</p></form>`, 1)
+		writeHTML(w, StatusUnprocessable, form)
 		return "", false
 	}
 	return values.Get("password"), true

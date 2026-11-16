@@ -424,7 +424,7 @@ func TestHomeEmbedsTheShellAndLogout(t *testing.T) {
 	header := cookieHeader(cookie)
 	header.Set("Content-Type", "application/x-www-form-urlencoded")
 	left := h.call(http.MethodPost, "/acesso/sair", []byte("csrf="+url.QueryEscape(csrf)), header)
-	if left.Code != http.StatusOK || count(t, h.store, `SELECT COUNT(*) FROM sessions`) != 0 {
+	if left.Code != http.StatusSeeOther || left.Header().Get("Location") != "/acesso/entrar" || count(t, h.store, `SELECT COUNT(*) FROM sessions`) != 0 {
 		t.Fatal("sair")
 	}
 	after := h.call(http.MethodGet, "/", nil, cookieHeader(cookie))

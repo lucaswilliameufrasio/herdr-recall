@@ -17,8 +17,10 @@
 <button class="button-secondary" type="submit">Sair</button>
 </form>
 </header>
-{{if eq .Page "machines"}}{{template "machines" .Machines}}{{end}}
+{{if eq .Page "machines"}}{{template "machines" .}}{{end}}
 {{if eq .Page "detail"}}{{template "detail" .Detail}}{{end}}
+{{if eq .Page "error"}}<p role="alert">Não foi possível mostrar as capturas.</p>{{end}}
+{{if eq .Page "code"}}<section><h2>Código de enrolamento</h2><p>Use este código uma vez, antes de expirar.</p><p><strong>{{.Code}}</strong></p><p>Expira em <time datetime="{{.Expires}}">{{.Expires}} UTC</time>.</p><p><a href="/">Voltar às máquinas</a></p></section>{{end}}
 </main>
 {{if .Page}}<script src="/assets/panel.js" defer></script>{{end}}
 </body>

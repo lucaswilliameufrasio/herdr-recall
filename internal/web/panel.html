@@ -1,25 +1,35 @@
 {{define "machines"}}
 <section><h2>Máquinas</h2>
-{{if .}}<ul class="machines">{{range .}}
-<li><a href="/maquinas/{{.ID}}">{{.Name}}</a><p>{{.Freshness}}</p><p>Boot: {{.Boot}} · {{.PaneCount}} panes</p></li>
+<form method="post" action="/maquinas/codigo">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button class="button-secondary" type="submit">Gerar código</button>
+</form>
+{{if .Machines}}<ul class="machines">{{range .Machines}}
+<li><a href="/maquinas/{{.ID}}">{{.Name}}</a><p>{{.Freshness}}</p>{{if .Revoked}}<p class="notice">Agente revogado. A última captura permanece.</p>{{end}}<p>Boot: {{.Boot}} · {{.PaneCount}} panes</p></li>
 {{end}}</ul>{{else}}<p>Nenhuma máquina. Gere um código e instale o agente.</p>{{end}}
 </section>
 {{end}}
 {{define "detail"}}
 <section><p><a href="/">Máquinas</a></p><h2>{{.Name}}</h2>
-<p>{{.Freshness}}</p>
+{{if .Freshness}}<p>{{.Freshness}}</p>{{end}}
+{{if .Revoked}}<p class="notice">Agente revogado. A última captura permanece.</p>{{end}}
 {{if .Presence.Slots}}
 <svg class="freshness" viewBox="0 0 150 20" role="img" aria-labelledby="presence-title"><title id="presence-title">{{.Presence.Label}}</title>
 {{range .Presence.Slots}}<rect class="{{.Class}}" x="{{.X}}" y="6" width="8" height="8"></rect>{{end}}
 </svg><p>{{.Presence.Label}}</p>
 {{end}}
-{{if .Boots}}<nav aria-label="Boots"><h3>Boots</h3><ul>{{range .Boots}}<li><a href="/maquinas/{{$.ID}}?boot={{.ID}}"><time datetime="{{.FirstReceived}}">{{.FirstReceived}} UTC</time> · {{.ID}}</a></li>{{end}}</ul></nav>{{end}}
+{{if .Boots}}<nav aria-label="Boots"><h3>Boots</h3><ul>{{range .Boots}}<li><a href="/maquinas/{{$.ID}}?boot={{.ID}}"{{if .Previous}} class="boot-previous"{{end}}{{if .Selected}} aria-current="page"{{end}}><time datetime="{{.FirstReceived}}">{{.FirstReceived}} UTC</time> · {{.ID}}</a></li>{{end}}</ul></nav>{{end}}
 {{if .HasSnapshot}}
 <h3>Captura</h3><p>Boot: {{.Boot}}</p>
 {{if .Panes}}
 <table class="pane-table"><thead><tr><th>Aba</th><th>Pane</th><th>Workspace</th><th>Diretório</th><th>Harness</th><th>Sessão</th><th>Confiança</th><th>Restaurar</th></tr></thead>
-<tbody>{{range .Panes}}<tr><td>{{cell .Tab}}</td><td>{{cell .Pane}}</td><td>{{cell .Workspace}}</td><td>{{cell .Directory}}</td><td>{{cell .Harness}}</td><td>{{cell .Session}}</td><td>{{.Confidence}}</td><td>{{if .Command}}<details><summary>mostrar</summary><pre>{{.Command}}</pre></details><button class="button-restore" type="button" data-argv="{{.Command}}">Restaurar</button><span class="copy-result" role="status"></span>{{else}}Sem sessão para restaurar.{{end}}</td></tr>{{end}}</tbody></table>
+<tbody>{{range .Panes}}<tr{{if .Ambiguous}} class="ambiguous"{{end}}><td>{{cell .Tab}}</td><td>{{cell .Pane}}</td><td>{{cell .Workspace}}</td><td>{{cell .Directory}}</td><td>{{cell .Harness}}</td><td>{{cell .Session}}</td><td>{{.Confidence}}{{if .Ambiguous}}<p>A mesma sessão aparece em mais de um pane. Confira antes de colar.</p>{{end}}</td><td>{{template "restore" .}}</td></tr>{{end}}</tbody></table>
+<div class="pane-cards">{{range .Panes}}<article class="pane-card{{if .Ambiguous}} ambiguous{{end}}">
+<dl><dt>Aba</dt><dd>{{cell .Tab}}</dd><dt>Pane</dt><dd>{{cell .Pane}}</dd><dt>Workspace</dt><dd>{{cell .Workspace}}</dd><dt>Diretório</dt><dd>{{cell .Directory}}</dd><dt>Harness</dt><dd>{{cell .Harness}}</dd><dt>Sessão</dt><dd>{{cell .Session}}</dd><dt>Confiança</dt><dd>{{.Confidence}}</dd></dl>
+{{if .Ambiguous}}<p>A mesma sessão aparece em mais de um pane. Confira antes de colar.</p>{{end}}{{template "restore" .}}
+</article>{{end}}</div>
 {{else}}<p>Nenhum pane nesta captura.</p>{{end}}
 {{else}}<p>Nenhum pane nesta captura.</p>{{end}}
 </section>
 {{end}}
+{{define "restore"}}{{if .Command}}<details><summary>mostrar</summary><pre>{{.Command}}</pre></details><button class="button-restore" type="button" data-argv="{{.Command}}">Restaurar</button><span class="copy-result" role="status"></span>{{else}}Sem sessão para restaurar.{{end}}{{end}}

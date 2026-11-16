@@ -68,6 +68,20 @@ func TestReducedMotionZerosTheDuration(t *testing.T) {
 	}
 }
 
+func TestResponsiveControlsKeepLabelsIntact(t *testing.T) {
+	css := string(readStylesheet(t, "components.css"))
+	for _, rule := range []string{
+		".pane-table th, .button-restore {\n  white-space: nowrap;",
+		"@media (max-width: 40rem)",
+		".pane-table { display: none; }",
+		".pane-cards { display: grid; gap: var(--space-3); }",
+	} {
+		if !strings.Contains(css, rule) {
+			t.Fatalf("regra visual ausente: %s", rule)
+		}
+	}
+}
+
 func TestComponentsUseOnlySemanticTokens(t *testing.T) {
 	tokens := rootProps(t, string(readStylesheet(t, "tokens.css")))
 	components := string(readStylesheet(t, "components.css"))
