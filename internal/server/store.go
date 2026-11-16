@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	schemaVersion = 1
+	schemaVersion = 2
 	maxBoots      = 14
 	maxReceipts   = 50
 	presenceKeep  = 15 * time.Minute
@@ -371,16 +371,30 @@ func (s *Store) migrate() error {
 	if version == schemaVersion {
 		return nil
 	}
-	if version != 0 {
+	if version < 0 || version > schemaVersion {
 		return fmt.Errorf("sqlite user_version %d não é suportada", version)
 	}
-	if _, err := s.db.Exec(schemaV1); err != nil {
-		return fmt.Errorf("criar esquema: %w", err)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
 	}
-	if _, err := s.db.Exec(`PRAGMA user_version = 1`); err != nil {
+	defer func() { _ = tx.Rollback() }()
+	if version == 0 {
+		if _, err := tx.Exec(schemaV1); err != nil {
+			return fmt.Errorf("criar esquema: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`CREATE TABLE agent_diagnostics (
+		device_id TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+		observed_at TEXT NOT NULL, received_at TEXT NOT NULL,
+		pending_count INTEGER NOT NULL, conflict_count INTEGER NOT NULL
+	)`); err != nil {
+		return fmt.Errorf("criar diagnósticos: %w", err)
+	}
+	if _, err := tx.Exec(`PRAGMA user_version = 2`); err != nil {
 		return fmt.Errorf("gravar versão: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 func stamp(now time.Time) string {

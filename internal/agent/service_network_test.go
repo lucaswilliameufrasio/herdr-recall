@@ -229,12 +229,56 @@ func TestDoctorCountsQueueAndConflictsWithoutExposingPayload(t *testing.T) {
 	}
 	manager := testManager(home, filepath.Join(home, "herdr-recall"), "", &fakeCmd{})
 	checks := manager.queueChecks()
-	if !hasCheck(checks, "fila", StatusOK) || !hasCheck(checks, "conflitos", StatusWarn) {
+	if !hasCheck(checks, "fila", StatusWarn) || !hasCheck(checks, "conflitos", StatusFail) {
 		t.Fatal("doctor não mostrou fila e conflito")
+	}
+	if !Failed(checks) {
+		t.Fatal("quarentena não pode resultar em diagnóstico bem-sucedido")
 	}
 	for _, check := range checks {
 		if strings.Contains(check.Detail, "ses_abcdef12") || strings.Contains(check.Detail, "/home/project") {
 			t.Fatal("doctor expôs conteúdo da fila")
 		}
+		if (check.Name == "fila" || check.Name == "conflitos") && (check.Fix == "" || !strings.Contains(check.Fix, "Não apague") && !strings.Contains(check.Fix, "Preserve")) {
+			t.Fatal("orientação de preservação ausente")
+		}
+	}
+}
+
+func TestDoctorReportsUnreadableQueueAndPreservesQuarantine(t *testing.T) {
+	home := t.TempDir()
+	stateDir := filepath.Join(home, ".local", "state", "herdr-recall")
+	opt := testOptions(stateDir, herdrRaw(sessionPane), time.Time{})
+	if _, err := Capture(context.Background(), opt); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := loadSpool(filepath.Join(stateDir, "spool.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflictPath := filepath.Join(stateDir, "spool.conflict")
+	if err := saveSpool(conflictPath, spoolFile{Items: []spoolItem{queue.Items[1]}}, syncDir); err != nil {
+		t.Fatal(err)
+	}
+	queuePath := filepath.Join(stateDir, "spool.json")
+	if err := os.WriteFile(queuePath, []byte("invalid-private-payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(conflictPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checks := testManager(home, filepath.Join(home, "herdr-recall"), "", &fakeCmd{}).queueChecks()
+	if !hasCheck(checks, "fila", StatusFail) || !hasCheck(checks, "conflitos", StatusFail) {
+		t.Fatal("erro da fila ocultou a quarentena")
+	}
+	for _, check := range checks {
+		if strings.Contains(check.Detail, "invalid-private-payload") || strings.Contains(check.Fix, "invalid-private-payload") {
+			t.Fatal("diagnóstico expôs dados")
+		}
+	}
+	after, err := os.ReadFile(conflictPath)
+	if err != nil || string(before) != string(after) {
+		t.Fatal("diagnóstico alterou a quarentena")
 	}
 }

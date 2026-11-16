@@ -7,12 +7,13 @@ import (
 
 // Machine represents the non-secret information shown in the machine list.
 type Machine struct {
-	ID        string
-	Name      string
-	Freshness string
-	Boot      string
-	PaneCount int
-	Revoked   bool
+	ID          string
+	Name        string
+	Freshness   string
+	Boot        string
+	PaneCount   int
+	Revoked     bool
+	Diagnostics string
 }
 
 type Boot struct {
@@ -42,6 +43,7 @@ type Detail struct {
 	Panes       []DeskPane
 	Presence    PresenceChart
 	Revoked     bool
+	Diagnostics string
 }
 
 // Chart anchors the window on the observed timestamp of the latest received

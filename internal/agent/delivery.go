@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -18,13 +19,23 @@ var ErrDeviceRevoked = errors.New("dispositivo não autorizado")
 
 var errDelivery = errors.New("não foi possível enviar a fila")
 
+// ErrDeliveryConflict indicates that a conflicting item was quarantined.
+var ErrDeliveryConflict = errors.New("conflito: item preservado na quarentena; confira service doctor")
+
+// ErrDeliveryPending indicates that delivery failed before local acknowledgement.
+var ErrDeliveryPending = errors.New("envio não confirmado: item permanece na fila e pode já ter chegado ao servidor")
+
+// ErrDeliveryUncertain indicates that the local state could not be confirmed.
+var ErrDeliveryUncertain = errors.New("estado local incerto após resposta do servidor; confira a fila e a quarentena")
+
 type deliveryOptions struct {
-	StateDir string
-	API      string
-	Token    string
-	GOOS     string
-	DirSync  func(string) error
-	Client   *http.Client
+	StateDir          string
+	API               string
+	Token             string
+	GOOS              string
+	DirSync           func(string) error
+	Client            *http.Client
+	ReportDiagnostics bool
 }
 
 // drainQueue leaves unacknowledged work on disk. Only one sender owns the FIFO
@@ -57,6 +68,18 @@ func drainQueue(ctx context.Context, opt deliveryOptions) error {
 		return errDelivery
 	}
 	defer release()
+	return drainQueueLocked(ctx, opt, client, api, "")
+}
+
+// drainQueueLocked expects the delivery lock and optionally stops at a
+// specific snapshot, refusing to treat quarantine as successful delivery.
+func drainQueueLocked(ctx context.Context, opt deliveryOptions, client *http.Client, api, target string) (result error) {
+	hadConflict := false
+	defer func() {
+		if hadConflict {
+			result = errors.Join(result, ErrDeliveryConflict)
+		}
+	}()
 	queuePath := filepath.Join(opt.StateDir, "spool.json")
 	for {
 		unlock, err := lockState(ctx, opt.StateDir, ".spool.lock")
@@ -69,6 +92,9 @@ func drainQueue(ctx context.Context, opt deliveryOptions) error {
 			return errDelivery
 		}
 		if len(queue.Items) == 0 {
+			if target != "" {
+				return errDelivery
+			}
 			return nil
 		}
 		item := queue.Items[0]
@@ -84,19 +110,39 @@ func drainQueue(ctx context.Context, opt deliveryOptions) error {
 		request.Header.Set("Authorization", "Bearer "+opt.Token)
 		response, err := client.Do(request)
 		if err != nil {
-			return errDelivery
+			return ErrDeliveryPending
 		}
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, 4097))
 		_ = response.Body.Close()
+		if readErr != nil || len(body) > 4096 {
+			return ErrDeliveryPending
+		}
 		if response.StatusCode == http.StatusUnauthorized {
-			return ErrDeviceRevoked
+			return errors.Join(ErrDeviceRevoked, ErrDeliveryPending)
+		}
+		var envelope struct {
+			Error string `json:"error"`
+		}
+		if response.StatusCode >= 200 && response.StatusCode < 300 && len(bytes.TrimSpace(body)) > 0 {
+			if json.Unmarshal(body, &envelope) != nil || envelope.Error != "" {
+				return ErrDeliveryPending
+			}
 		}
 		conflict := response.StatusCode == http.StatusConflict
 		if !conflict && (response.StatusCode < 200 || response.StatusCode >= 300) {
-			return errDelivery
+			return ErrDeliveryPending
 		}
 		if err := acknowledgeItem(ctx, opt, item, conflict); err != nil {
-			return errDelivery
+			return ErrDeliveryUncertain
+		}
+		if conflict {
+			hadConflict = true
+			if target != "" {
+				return nil
+			}
+		}
+		if target != "" && item.Kind == kindSnapshot && item.SnapshotID == target {
+			return nil
 		}
 	}
 }

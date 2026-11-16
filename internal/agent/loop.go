@@ -38,11 +38,12 @@ func RunConnected(ctx context.Context, opt CaptureOptions, home string, every ti
 		return err
 	}
 	return runDelivery(ctx, opt, every, log, deliveryOptions{
-		StateDir: opt.StateDir,
-		API:      api,
-		Token:    token,
-		GOOS:     opt.GOOS,
-		DirSync:  opt.DirSync,
+		StateDir:          opt.StateDir,
+		API:               api,
+		Token:             token,
+		GOOS:              opt.GOOS,
+		DirSync:           opt.DirSync,
+		ReportDiagnostics: true,
 	})
 }
 
@@ -64,8 +65,20 @@ func runDelivery(ctx context.Context, opt CaptureOptions, every time.Duration, l
 			case <-runCtx.Done():
 				return
 			case job := <-jobs:
+				if delivery.ReportDiagnostics && job.Err() == nil {
+					if reportErr := reportDiagnostics(job, delivery); reportErr != nil && job.Err() == nil && log != nil {
+						logMu.Lock()
+						fmt.Fprintln(log, "Não foi possível atualizar o diagnóstico remoto; o painel pode estar desatualizado.")
+						logMu.Unlock()
+					}
+				}
 				err := drainQueue(job, delivery)
 				if errors.Is(err, ErrDeviceRevoked) {
+					if errors.Is(err, ErrDeliveryConflict) && log != nil {
+						logMu.Lock()
+						fmt.Fprintln(log, "Conflito no envio. Há item em quarentena; consulte service doctor.")
+						logMu.Unlock()
+					}
 					select {
 					case revoked <- struct{}{}:
 					default:
@@ -73,9 +86,21 @@ func runDelivery(ctx context.Context, opt CaptureOptions, every time.Duration, l
 					stop()
 					return
 				}
+				if delivery.ReportDiagnostics && job.Err() == nil {
+					if reportErr := reportDiagnostics(job, delivery); reportErr != nil && job.Err() == nil && log != nil {
+						logMu.Lock()
+						fmt.Fprintln(log, "Não foi possível atualizar o diagnóstico remoto; o painel pode estar desatualizado.")
+						logMu.Unlock()
+					}
+				}
 				if err != nil && job.Err() == nil && log != nil {
 					logMu.Lock()
-					fmt.Fprintln(log, "Envio adiado. A fila permanece na máquina.")
+					if errors.Is(err, ErrDeliveryConflict) {
+						fmt.Fprintln(log, "Conflito no envio. Há item em quarentena; consulte service doctor.")
+					}
+					if !errors.Is(err, ErrDeliveryConflict) || errors.Is(err, ErrDeliveryPending) || errors.Is(err, ErrDeliveryUncertain) {
+						fmt.Fprintln(log, "Envio não concluído. Confira a fila e a quarentena com service doctor.")
+					}
 					logMu.Unlock()
 				}
 			}

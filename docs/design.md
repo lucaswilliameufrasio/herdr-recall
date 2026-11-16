@@ -106,6 +106,8 @@ Conjunto de panes que dispara envio: ids de workspace, aba e pane, rótulos, `cw
 
 Para que uma captura avulsa não sobrescreva a fila enquanto o serviço envia, as operações de leitura e escrita da fila usam uma trava de arquivo compartilhada entre processos. Uma segunda trava permite só um emissor por diretório de estado; a trava da fila é liberada durante o HTTP. Assim, uma conexão lenta não segura a gravação local. Cada volta de envio começa somente após a captura sincronizada; ao chegar a próxima volta, a requisição pendente é cancelada e o item sem confirmação permanece para repetição. Em 409, `spool.conflict` é gravado antes de remover a cabeça e a repetição reconhece o mesmo item já em quarentena, inclusive após falha entre as duas gravações. Se o processo cair depois de um 2xx e antes da remoção local, o servidor pode receber novamente os mesmos bytes: a garantia é de repetição idempotente, não entrega exatamente uma vez.
 
+O diagnóstico remoto usa `POST /v1/diagnostics`, autenticado pelo mesmo token de dispositivo, com apenas horário de observação e contagens de fila e quarentena. É um relato best-effort independente do FIFO, tentado antes e depois do envio, nunca uma confirmação de entrega nem uma fila paralela. O servidor guarda somente a observação mais recente por máquina e rejeita relatos fora de ordem ou com relógio excessivamente no futuro. O painel distingue relato recente, antigo ou relógio divergente, e indisponível; mesmo um relato recente pode já ter mudado. Agentes antigos não relatam o estado. O esquema SQLite 2 acrescenta uma tabela por migração transacional sem modificar as capturas existentes. Como um agente offline não consegue avisar o servidor, nenhum status remoto prova que a fila está vazia agora.
+
 Casamento no v1, um passo só. `agent_session` do Herdr com `kind == "id"` e `agent` normalizado para `claude`, `grok` ou `opencode`: `session_id` é esse valor, `match_basis` é `herdr_agent_session`, `confidence` é `high`, e o argv é uma das três formas abaixo. `kind == "path"` não vira sessão e o valor não é armazenado. Sem `agent_session` de id, ou com agente fora dos três nomes: `session_id` e `resume_argv` ausentes, `match_basis` `none`, `confidence` `low`. A linha continua, com workspace, aba, pane e o `cwd` do pane, para a pessoa ver o diretório. O texto é “Sem sessão para restaurar.” Não há segunda tentativa por registro local nem por pid.
 
 Dois panes do mesmo snapshot com o mesmo `session_id` não vazio: os dois levam `ambiguous_with` com o outro `pane_id` e `confidence` `low`. O argv permanece. Isso se vê no próprio snapshot; não precisa de fixture externo. Não se marca ambiguidade só porque dois panes compartilham `cwd`. Sem id, não há comando errado para copiar.
@@ -847,7 +849,7 @@ Chaves proibidas, além de qualquer campo desconhecido: as do tracker citadas no
 
 ## Data Model Changes
 
-Arquivo único, SQLite, WAL, `user_version` 1. Não há migração de produto anterior. Subir um diretório vazio cria o esquema. Não se abre o `data/` do tracker.
+Arquivo único, SQLite, WAL, `user_version` 2. A versão 1 deste produto migra transacionalmente para a versão 2, preservando os dados existentes; não há migração de produto anterior. Subir um diretório vazio cria o esquema. Não se abre o `data/` do tracker.
 
 ```sql
 CREATE TABLE operator (

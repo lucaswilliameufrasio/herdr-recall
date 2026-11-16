@@ -44,8 +44,8 @@ func TestDrainQueueFIFOSuccessAndConflict(t *testing.T) {
 	}))
 	defer server.Close()
 	err = drainQueue(context.Background(), deliveryOptions{StateDir: dir, API: server.URL, Token: "synthetic-token", GOOS: "linux"})
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, ErrDeliveryConflict) {
+		t.Fatalf("conflito não foi informado: %v", err)
 	}
 	if strings.Join(paths, ",") != "/v1/presence,/v1/snapshots,/v1/presence" || len(bodies) != 3 || !bytes.Equal(bodies[0], before.Items[0].Body) || !bytes.Equal(bodies[1], before.Items[1].Body) || !bytes.Equal(bodies[2], before.Items[2].Body) {
 		t.Fatal("fila não foi enviada em ordem com os bytes gravados")
@@ -206,8 +206,8 @@ func TestConflictAlreadyInQuarantineDoesNotDuplicate(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	if err := drainQueue(context.Background(), deliveryOptions{StateDir: dir, API: server.URL, Token: "synthetic-token", GOOS: "linux"}); err != nil {
-		t.Fatal(err)
+	if err := drainQueue(context.Background(), deliveryOptions{StateDir: dir, API: server.URL, Token: "synthetic-token", GOOS: "linux"}); !errors.Is(err, ErrDeliveryConflict) {
+		t.Fatalf("conflito não foi informado: %v", err)
 	}
 	conflict, err := loadSpool(filepath.Join(dir, "spool.conflict"))
 	if err != nil || len(conflict.Items) != 1 {
@@ -250,8 +250,8 @@ func TestConflictSyncFailureKeepsHeadAndRetryDoesNotDuplicate(t *testing.T) {
 		t.Fatal("falha repetida removeu a cabeça")
 	}
 	delivery.DirSync = syncDir
-	if err := drainQueue(context.Background(), delivery); err != nil {
-		t.Fatal(err)
+	if err := drainQueue(context.Background(), delivery); !errors.Is(err, ErrDeliveryConflict) {
+		t.Fatalf("conflito não foi informado: %v", err)
 	}
 	conflict, err := loadSpool(filepath.Join(dir, "spool.conflict"))
 	if err != nil || len(conflict.Items) != 1 {

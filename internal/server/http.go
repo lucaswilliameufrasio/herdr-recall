@@ -150,6 +150,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/devices", s.enroll)
 	mux.HandleFunc("POST /v1/snapshots", s.snapshot)
 	mux.HandleFunc("POST /v1/presence", s.presence)
+	mux.HandleFunc("POST /v1/diagnostics", s.diagnostics)
 	mux.HandleFunc("GET /v1/device", s.showDevice)
 	return mux
 }

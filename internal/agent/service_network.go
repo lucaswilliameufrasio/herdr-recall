@@ -66,19 +66,29 @@ func (m Manager) serviceCredentials() (string, string, error) {
 func (m Manager) queueChecks() []Check {
 	stateDir := filepath.Join(m.Home, ".local", "state", "herdr-recall")
 	queue, err := loadSpool(filepath.Join(stateDir, "spool.json"))
+	var checks []Check
 	if err != nil {
-		return []Check{{Name: "fila", Status: StatusFail, Detail: "não foi possível ler a fila"}}
+		checks = append(checks, Check{Name: "fila", Status: StatusFail, Detail: "não foi possível ler a fila", Fix: "Preserve os arquivos locais e investigue permissões e integridade; não os apague."})
+	} else {
+		queueStatus := StatusOK
+		queueFix := ""
+		if len(queue.Items) > 0 {
+			queueStatus = StatusWarn
+			queueFix = "Aguarde a próxima tentativa; verifique servidor, token e serviço. Não apague a fila."
+		}
+		checks = append(checks, Check{Name: "fila", Status: queueStatus, Detail: fmt.Sprintf("%d itens pendentes; a contagem pode mudar durante o envio", len(queue.Items)), Fix: queueFix})
 	}
-	checks := []Check{{Name: "fila", Status: StatusOK, Detail: fmt.Sprintf("%d itens pendentes", len(queue.Items))}}
 	conflicts, err := loadSpool(filepath.Join(stateDir, "spool.conflict"))
 	if err != nil {
-		return append(checks, Check{Name: "conflitos", Status: StatusFail, Detail: "não foi possível ler a quarentena"})
+		return append(checks, Check{Name: "conflitos", Status: StatusFail, Detail: "não foi possível ler a quarentena", Fix: "Preserve os arquivos locais e investigue permissões e integridade; não os apague."})
 	}
 	status := StatusOK
+	fix := ""
 	if len(conflicts.Items) > 0 {
-		status = StatusWarn
+		status = StatusFail
+		fix = "Preserve a quarentena; consulte os logs do serviço e investigue o conflito antes de qualquer reenvio ou remoção."
 	}
-	return append(checks, Check{Name: "conflitos", Status: status, Detail: fmt.Sprintf("%d itens em quarentena", len(conflicts.Items))})
+	return append(checks, Check{Name: "conflitos", Status: status, Detail: fmt.Sprintf("%d itens em quarentena", len(conflicts.Items)), Fix: fix})
 }
 
 func (m Manager) serverChecks(ctx context.Context) []Check {

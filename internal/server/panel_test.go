@@ -56,6 +56,11 @@ func TestPanelRendersStoredDeskAndPresence(t *testing.T) {
 	if detail.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("cache")
 	}
+	for _, want := range []string{"Diagnosticar envio e conflitos", "Estado da fila e quarentena indisponível", "herdr-recall service doctor", "Não apague nem reenvie"} {
+		if !strings.Contains(detail.Body.String(), want) {
+			t.Errorf("orientação ausente: %s", want)
+		}
+	}
 	asset := h.call(http.MethodGet, "/assets/panel.js", nil, nil)
 	if asset.Code != http.StatusOK || !strings.Contains(asset.Body.String(), "navigator.clipboard.writeText") {
 		t.Fatal("script ausente")

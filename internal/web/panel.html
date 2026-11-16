@@ -5,14 +5,22 @@
 <button class="button-secondary" type="submit">Gerar código</button>
 </form>
 {{if .Machines}}<ul class="machines">{{range .Machines}}
-<li><a href="/maquinas/{{.ID}}">{{.Name}}</a><p>{{.Freshness}}</p>{{if .Revoked}}<p class="notice">Agente revogado. A última captura permanece.</p>{{end}}<p>Boot: {{.Boot}} · {{.PaneCount}} panes</p></li>
+<li><a href="/maquinas/{{.ID}}">{{.Name}}</a><p>{{.Freshness}}</p><p>{{.Diagnostics}}</p>{{if .Revoked}}<p class="notice">Agente revogado. A última captura permanece.</p>{{end}}<p>Boot: {{.Boot}} · {{.PaneCount}} panes</p></li>
 {{end}}</ul>{{else}}<p>Nenhuma máquina. Gere um código e instale o agente.</p>{{end}}
 </section>
 {{end}}
 {{define "detail"}}
 <section><p><a href="/">Máquinas</a></p><h2>{{.Name}}</h2>
 {{if .Freshness}}<p>{{.Freshness}}</p>{{end}}
+<p>{{.Diagnostics}}</p>
 {{if .Revoked}}<p class="notice">Agente revogado. A última captura permanece.</p>{{end}}
+<details class="diagnostic-help"><summary>Diagnosticar envio e conflitos</summary>
+<p>O relato mostra uma leitura anterior, não o estado atual garantido. Sem comunicação, não é possível confirmar o estado atual do envio.</p>
+<ol><li>Na máquina que executa o agente, rode <code>herdr-recall service doctor</code>.</li>
+<li>Se houver itens pendentes, confira a conexão, o token e o serviço; o agente tenta novamente na próxima volta.</li>
+<li>Se houver conflitos, preserve a quarentena e consulte os logs antes de decidir como corrigir. Não apague nem reenvie itens sem investigar.</li></ol>
+<p>Linux: <code>journalctl --user -u herdr-recall -n 30</code>. macOS: <code>tail -n 30 ~/Library/Logs/herdr-recall.log</code>.</p>
+</details>
 {{if .Presence.Slots}}
 <svg class="freshness" viewBox="0 0 150 20" role="img" aria-labelledby="presence-title"><title id="presence-title">{{.Presence.Label}}</title>
 {{range .Presence.Slots}}<rect class="{{.Class}}" x="{{.X}}" y="6" width="8" height="8"></rect>{{end}}

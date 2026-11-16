@@ -12,13 +12,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestOpenCreatesSchemaVersion1(t *testing.T) {
+func TestOpenCreatesSchemaVersion2(t *testing.T) {
 	store := openStore(t)
 	var version int
 	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 1 {
+	if version != 2 {
 		t.Fatalf("versão: %d", version)
 	}
 	var mode string
@@ -28,7 +28,7 @@ func TestOpenCreatesSchemaVersion1(t *testing.T) {
 	if mode != "wal" {
 		t.Fatalf("modo: %s", mode)
 	}
-	for _, table := range []string{"operator", "sessions", "enrollment_codes", "boots", "devices", "snapshots", "snapshot_receipts", "presence"} {
+	for _, table := range []string{"operator", "sessions", "enrollment_codes", "boots", "devices", "snapshots", "snapshot_receipts", "presence", "agent_diagnostics"} {
 		var name string
 		err := store.db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
 		if err != nil {
@@ -47,7 +47,7 @@ func TestOpenRejectsANewerSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`PRAGMA user_version = 2`); err != nil {
+	if _, err := db.Exec(`PRAGMA user_version = 3`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {

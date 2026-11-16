@@ -32,6 +32,8 @@ type CaptureOptions struct {
 	NewID    func() (string, error)
 	DirSync  func(dir string) error
 	GOOS     string
+	// ForceSnapshot queues this capture even if the desk is unchanged.
+	ForceSnapshot bool
 }
 
 // HerdrArgv is the only Herdr command the capture runs.
@@ -155,8 +157,8 @@ func Capture(ctx context.Context, opt CaptureOptions) (CaptureResult, error) {
 	wroteSnapshot := false
 	var snapshotBody []byte
 	if herdrOK {
-		changed := !haveBaseline || baseline.BootID != opt.BootID
-		if haveBaseline && baseline.BootID == opt.BootID {
+		changed := opt.ForceSnapshot || !haveBaseline || baseline.BootID != opt.BootID
+		if !changed && haveBaseline && baseline.BootID == opt.BootID {
 			var changedErr error
 			changed, changedErr = deskChanged(baseline.Panes, baseline.Layouts, panes, layouts)
 			if changedErr != nil {

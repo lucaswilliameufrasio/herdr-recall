@@ -74,7 +74,7 @@ func (s *Store) panelMachines(now time.Time) ([]web.Machine, error) {
 		if err != nil {
 			return nil, err
 		}
-		machine := web.Machine{ID: device.id, Name: device.name, Boot: "—", Freshness: detail.Freshness, Revoked: detail.Revoked}
+		machine := web.Machine{ID: device.id, Name: device.name, Boot: "—", Freshness: detail.Freshness, Revoked: detail.Revoked, Diagnostics: detail.Diagnostics}
 		if detail.HasSnapshot {
 			machine.Boot = detail.Boot
 			machine.PaneCount = len(detail.Panes)
@@ -95,6 +95,26 @@ func (s *Store) panelDetail(id, selected string, now time.Time) (web.Detail, boo
 		return web.Detail{}, false, err
 	}
 	detail := web.Detail{ID: id, Name: name, Revoked: revoked.Valid}
+	detail.Diagnostics = "Estado da fila e quarentena indisponível; consulte o doctor na máquina."
+	var observedAt, receivedAt string
+	var pendingCount, conflictCount int
+	err = s.db.QueryRow(`SELECT observed_at, received_at, pending_count, conflict_count FROM agent_diagnostics WHERE device_id=?`, id).
+		Scan(&observedAt, &receivedAt, &pendingCount, &conflictCount)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return detail, false, err
+	}
+	if err == nil {
+		observed, observedOK := contract.ParseTime(observedAt)
+		received, receivedOK := contract.ParseTime(receivedAt)
+		if !observedOK || !receivedOK {
+			return detail, false, errors.New("diagnóstico inválido")
+		}
+		state := "Recente"
+		if now.Sub(received) > 3*time.Minute || now.Sub(observed) > 3*time.Minute || observed.Sub(now) > time.Minute || received.Sub(now) > time.Minute {
+			state = "Antigo ou relógio divergente"
+		}
+		detail.Diagnostics = fmt.Sprintf("%s: %d itens pendentes, %d em quarentena; observado em %s UTC. Contagens podem ter mudado; confirme com o doctor.", state, pendingCount, conflictCount, observed.UTC().Format("2006-01-02 15:04:05"))
+	}
 	rows, err := s.db.Query(`SELECT boot_id, first_received_at FROM boots WHERE device_id=? ORDER BY first_received_at DESC, boot_id ASC`, id)
 	if err != nil {
 		return detail, false, err

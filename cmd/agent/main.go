@@ -89,6 +89,12 @@ func dispatch(args []string, in io.Reader, out, errW io.Writer, home string, hom
 			return 1
 		}
 		return captureCommand(args[1:], out, errW, opt)
+	case "verify":
+		if homeErr != nil {
+			fmt.Fprintln(errW, "Não foi possível verificar esta máquina.")
+			return 1
+		}
+		return verifyCommand(args[1:], out, errW, home, goos)
 	case "run":
 		if len(args) != 1 {
 			fmt.Fprintln(errW, "uso: herdr-recall run")
