@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestServiceInstallRequiresConfigAndTokenWithoutSideEffects(t *testing.T) {
@@ -209,5 +210,31 @@ func TestFailedReinstallDoesNotModifyExistingUnit(t *testing.T) {
 	content, err := os.ReadFile(unit)
 	if err != nil || string(content) != "existing unit" || len(runner.calls) != 0 {
 		t.Fatal("unidade ou serviço alterado antes da validação")
+	}
+}
+
+func TestDoctorCountsQueueAndConflictsWithoutExposingPayload(t *testing.T) {
+	home := t.TempDir()
+	stateDir := filepath.Join(home, ".local", "state", "herdr-recall")
+	opt := testOptions(stateDir, herdrRaw(sessionPane), time.Time{})
+	if _, err := Capture(context.Background(), opt); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := loadSpool(filepath.Join(stateDir, "spool.json"))
+	if err != nil || len(queue.Items) != 2 {
+		t.Fatal("fixture da fila inválida")
+	}
+	if err := saveSpool(filepath.Join(stateDir, "spool.conflict"), spoolFile{Items: []spoolItem{queue.Items[1]}}, syncDir); err != nil {
+		t.Fatal(err)
+	}
+	manager := testManager(home, filepath.Join(home, "herdr-recall"), "", &fakeCmd{})
+	checks := manager.queueChecks()
+	if !hasCheck(checks, "fila", StatusOK) || !hasCheck(checks, "conflitos", StatusWarn) {
+		t.Fatal("doctor não mostrou fila e conflito")
+	}
+	for _, check := range checks {
+		if strings.Contains(check.Detail, "ses_abcdef12") || strings.Contains(check.Detail, "/home/project") {
+			t.Fatal("doctor expôs conteúdo da fila")
+		}
 	}
 }

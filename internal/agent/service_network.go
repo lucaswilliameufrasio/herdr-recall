@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -58,6 +59,26 @@ func (m Manager) serviceCredentials() (string, string, error) {
 		return "", "", ErrServiceToken
 	}
 	return api, token, nil
+}
+
+// queueChecks reads atomic snapshots of the queue and quarantine without
+// modifying either file or revealing any payload.
+func (m Manager) queueChecks() []Check {
+	stateDir := filepath.Join(m.Home, ".local", "state", "herdr-recall")
+	queue, err := loadSpool(filepath.Join(stateDir, "spool.json"))
+	if err != nil {
+		return []Check{{Name: "fila", Status: StatusFail, Detail: "não foi possível ler a fila"}}
+	}
+	checks := []Check{{Name: "fila", Status: StatusOK, Detail: fmt.Sprintf("%d itens pendentes", len(queue.Items))}}
+	conflicts, err := loadSpool(filepath.Join(stateDir, "spool.conflict"))
+	if err != nil {
+		return append(checks, Check{Name: "conflitos", Status: StatusFail, Detail: "não foi possível ler a quarentena"})
+	}
+	status := StatusOK
+	if len(conflicts.Items) > 0 {
+		status = StatusWarn
+	}
+	return append(checks, Check{Name: "conflitos", Status: status, Detail: fmt.Sprintf("%d itens em quarentena", len(conflicts.Items))})
 }
 
 func (m Manager) serverChecks(ctx context.Context) []Check {

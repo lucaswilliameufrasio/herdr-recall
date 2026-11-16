@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -57,8 +58,12 @@ func loadSpool(path string) (spoolFile, error) {
 	if err := decoder.Decode(&file); err != nil {
 		return spoolFile{}, err
 	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return spoolFile{}, errors.New("fila inválida")
+	}
 	if file.Items == nil {
-		file.Items = []spoolItem{}
+		return spoolFile{}, errors.New("fila inválida")
 	}
 	return file, nil
 }

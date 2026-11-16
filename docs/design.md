@@ -5,7 +5,7 @@
 | Autor | [a preencher] |
 | Data | 2026-11-12 |
 | Status | Draft |
-| Progresso | PRs 1–11, restauração local, captura avulsa e serviço local de 60 s estão no `main`. O envio do loop, item 12, continua por último. |
+| Progresso | Itens 1–12 estão implementados e verificados localmente. A implantação e o funcionamento nativo no macOS ainda não foram verificados. |
 | Nome | **herdr-recall** (provisório) |
 | Relação | Produto irmão do `ai-usage-tracker`. Não é uma página dele. Este documento é o registro do desenho. |
 
@@ -104,6 +104,8 @@ Loop de 60 s, alinhado ao relógio monotônico, não a “mais ou menos um minut
 
 Conjunto de panes que dispara envio: ids de workspace, aba e pane, rótulos, `cwd` do pane, harness, id de sessão, argv, base, confiança e a árvore de divisão. `captured_at` não entra nessa comparação. Entra no hash canônico que o servidor guarda, e por isso a retentativa reenvia os bytes já gravados no spool, sem remarcar a hora. Mesa quieta não reenvia o corpo; reenvia presença.
 
+Para que uma captura avulsa não sobrescreva a fila enquanto o serviço envia, as operações de leitura e escrita da fila usam uma trava de arquivo compartilhada entre processos. Uma segunda trava permite só um emissor por diretório de estado; a trava da fila é liberada durante o HTTP. Assim, uma conexão lenta não segura a gravação local. Cada volta de envio começa somente após a captura sincronizada; ao chegar a próxima volta, a requisição pendente é cancelada e o item sem confirmação permanece para repetição. Em 409, `spool.conflict` é gravado antes de remover a cabeça e a repetição reconhece o mesmo item já em quarentena, inclusive após falha entre as duas gravações. Se o processo cair depois de um 2xx e antes da remoção local, o servidor pode receber novamente os mesmos bytes: a garantia é de repetição idempotente, não entrega exatamente uma vez.
+
 Casamento no v1, um passo só. `agent_session` do Herdr com `kind == "id"` e `agent` normalizado para `claude`, `grok` ou `opencode`: `session_id` é esse valor, `match_basis` é `herdr_agent_session`, `confidence` é `high`, e o argv é uma das três formas abaixo. `kind == "path"` não vira sessão e o valor não é armazenado. Sem `agent_session` de id, ou com agente fora dos três nomes: `session_id` e `resume_argv` ausentes, `match_basis` `none`, `confidence` `low`. A linha continua, com workspace, aba, pane e o `cwd` do pane, para a pessoa ver o diretório. O texto é “Sem sessão para restaurar.” Não há segunda tentativa por registro local nem por pid.
 
 Dois panes do mesmo snapshot com o mesmo `session_id` não vazio: os dois levam `ambiguous_with` com o outro `pane_id` e `confidence` `low`. O argv permanece. Isso se vê no próprio snapshot; não precisa de fixture externo. Não se marca ambiguidade só porque dois panes compartilham `cwd`. Sem id, não há comando errado para copiar.
@@ -131,7 +133,7 @@ Arquivos, modo 0600, diretórios 0700:
 
 `herdr-recall capture` faz uma volta de captura e para. Grava `latest.json` com a árvore de divisão, ainda sem HTTP. Se o Herdr não responde, o arquivo anterior fica e o comando diz isso. O log leva a contagem de panes e de divisões, sem argv, sessão nem cwd.
 
-`herdr-recall run` repete essa captura no ato e depois a cada 60 s, no relógio monotônico. Continua sem HTTP. `herdr-recall service install` exige configuração válida e token legível e privado antes de gravar a unidade de usuário que executa `run`; a mesma validação vale para `--dry-run`, que não grava nem chama o systemd ou o launchd. `doctor` lê a unidade, o `PATH`, o `herdr` e `dirsync-warn`, consulta `/healthz` e, se saudável, `GET /v1/device`. Nenhum deles inicia o envio da fila do item 12. O linger, se estiver desligado, é aviso: o comando não liga.
+`herdr-recall run` repete essa captura no ato e depois a cada 60 s, no relógio monotônico. Cada volta grava antes de iniciar o envio da fila. `herdr-recall service install` exige configuração válida e token legível e privado antes de gravar a unidade de usuário que executa `run`; a mesma validação vale para `--dry-run`, que não grava nem chama o systemd ou o launchd. `doctor` lê a unidade, o `PATH`, o `herdr` e `dirsync-warn`, consulta `/healthz` e, se saudável, `GET /v1/device`. O linger, se estiver desligado, é aviso: o comando não liga.
 
 `herdr-recall latest` imprime a tabela local sem falar com o servidor. Colunas, nesta ordem: workspace, aba, pane, diretório, harness, sessão, confiança, comando. Confiança sai como “alta” ou “baixa”, nunca `high`/`low`. Sessão vazia e comando vazio saem como “—”. O comando é a mesma linha com aspas simples que o botão Restaurar copia. Essa linha vai para a stdout porque a pessoa pediu a tabela. Log do processo, journal e arquivo de log do launchd não recebem argv, sessão nem cwd.
 
@@ -196,6 +198,8 @@ sequenceDiagram
 ### Servidor e API
 
 Bind padrão `127.0.0.1:8788` (o tracker usa 8787). HTTP sem TLS só em loopback. Qualquer outro bind sem certificado no listener recusa subir. Não há confiança em `X-Forwarded-Proto` no v1: quem termina TLS noutro processo faz o proxy para o loopback. Cookie `Secure` quando o listener é TLS.
+
+O executável `herdr-recall-server` usa `~/.local/state/herdr-recall-server/server.db` por padrão, com arquivo 0600 e diretório criado em 0700; `--db` escolhe outro arquivo sem alterar permissões de um banco existente, e `--bind` escolhe outro endereço loopback. Nesta implementação o executável escuta somente em loopback; TLS externo pode terminar num proxy para esse listener.
 
 Operador: uma linha, criada uma vez. Senha com no mínimo 12 caracteres, sem regra de composição, hash bcrypt custo 12 (`golang.org/x/crypto/bcrypt`, já indireto no tracker). Cookie `recall_session`: 32 bytes aleatórios, no servidor só o SHA-256, `HttpOnly`, `SameSite=Strict`, `Path=/`, vida de 12 h sem renovar. Formulários que mudam estado levam token CSRF da sessão. Ingestão não usa cookie; usa `Authorization: Bearer`.
 
@@ -1097,6 +1101,7 @@ Fora desta fila, sem data: casamento por pid ou cwd. Só abre quando existirem f
     - `install` exige config e token; `uninstall` preserva config, token, spool e histórico. Unidade com `RestartPreventExitStatus=3` e `PATH` que inclui o diretório do `herdr`. `doctor` em `fail` se `herdr` não está nesse `PATH`. `dirsync-warn` presente é `warn`, não `fail`, e a saída continua 0 se esse for o único achado. Windows recusado. `--dry-run` não escreve unidade. O `doctor` chama `/healthz` e `GET /v1/device`, sem antecipar o envio do item 12.
 
 12. **Loop de 60 s**
+    - Implementado e verificado localmente. A integração exercita enrolamento, captura, envio, SQLite e lista autenticada com dados sintéticos; o executável respondeu ao health check e encerrou com SIGTERM em loopback. macOS nativo e implantação não foram verificados.
     - Arquivos: `internal/agent/loop.go`.
     - Depende de: PR 3, PR 5, PR 6 e PR 11.
     - Primeiro PR que envia de verdade. Disco antes da rede. FIFO. Na mesma volta, 200 e 409 seguem na próxima cabeça; erro de rede ou 5xx param a volta; 401 sai 3. O 200 que não cobre a mesa também apaga o item local e segue. É o primeiro em que uma máquina enrolada aparece na tabela por um agente de verdade. Antes disso, loja, HTTP e captura se testam separados, e o PR 9 só renderiza fixture.

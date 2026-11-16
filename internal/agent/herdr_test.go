@@ -113,10 +113,6 @@ func TestCaptureKeepsRestoreFieldsAndDropsTheRest(t *testing.T) {
 		t.Fatalf("histórico: %s", history)
 	}
 
-	latestInfo, err := os.Stat(filepath.Join(dir, "latest.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	opt.Now = when.Add(time.Minute)
 	if _, err := Capture(context.Background(), opt); err != nil {
 		t.Fatal(err)
@@ -124,13 +120,11 @@ func TestCaptureKeepsRestoreFieldsAndDropsTheRest(t *testing.T) {
 	if ids != 1 {
 		t.Fatalf("ids numa mesa quieta: %d", ids)
 	}
-	againInfo, err := os.Stat(filepath.Join(dir, "latest.json"))
-	if err != nil {
-		t.Fatal(err)
+	quiet := readLatest(t, dir)
+	if quiet.CapturedAt != contract.FormatTime(opt.Now) || quiet.SnapshotID == latest.SnapshotID {
+		t.Fatal("mesa quieta não registrou o minuto local")
 	}
-	if !latestInfo.ModTime().Equal(againInfo.ModTime()) || string(mustRead(t, filepath.Join(dir, "latest.json"))) != string(raw) {
-		t.Fatal("mesa quieta reescreveu latest.json")
-	}
+	raw = mustRead(t, filepath.Join(dir, "latest.json"))
 	spool = readSpoolFile(t, dir)
 	if len(spool.Items) != 3 || spool.Items[0].ObservedAt != "2026-11-13T00:00:00.000000000Z" || spool.Items[2].Kind != kindPresence {
 		t.Fatalf("cabeça do spool mudou: %+v", spool.Items)
@@ -252,8 +246,9 @@ func TestLinuxDirSyncFailureKeepsTheSnapshotID(t *testing.T) {
 		t.Fatalf("ids: %d", calls)
 	}
 	latest := readLatest(t, dir)
-	if latest.SnapshotID != "0123456789abcdef" {
-		t.Fatalf("id: %s", latest.SnapshotID)
+	queue := readSpoolFile(t, dir)
+	if latest.CapturedAt != contract.FormatTime(opt.Now) || len(queue.Items) < 2 || queue.Items[1].SnapshotID != "0123456789abcdef" {
+		t.Fatal("recuperação perdeu o id congelado da fila ou a captura nova")
 	}
 }
 

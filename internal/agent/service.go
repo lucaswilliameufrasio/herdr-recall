@@ -504,7 +504,8 @@ func (m Manager) Doctor(ctx context.Context) []Check {
 	if m.LookPath != nil {
 		if _, lookErr := m.LookPath(tool); lookErr != nil {
 			add("plataforma", StatusFail, tool+" ausente", "")
-			return append(checks, m.serverChecks(ctx)...)
+			checks = append(checks, m.serverChecks(ctx)...)
+			return append(checks, m.queueChecks()...)
 		}
 	}
 	add("plataforma", StatusOK, label, "")
@@ -557,6 +558,7 @@ func (m Manager) Doctor(ctx context.Context) []Check {
 		add("dirsync", StatusWarn, "o sync de diretório foi recusado", "")
 	}
 	checks = append(checks, m.serverChecks(ctx)...)
+	checks = append(checks, m.queueChecks()...)
 	return checks
 }
 

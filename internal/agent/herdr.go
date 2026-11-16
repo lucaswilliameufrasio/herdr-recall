@@ -68,6 +68,11 @@ func Capture(ctx context.Context, opt CaptureOptions) (CaptureResult, error) {
 	if opt.StateDir == "" {
 		return CaptureResult{}, errors.New("diretório de estado vazio")
 	}
+	unlock, err := lockState(ctx, opt.StateDir, ".spool.lock")
+	if err != nil {
+		return CaptureResult{}, err
+	}
+	defer unlock()
 	if opt.Now.IsZero() {
 		opt.Now = time.Now()
 	}
@@ -150,8 +155,8 @@ func Capture(ctx context.Context, opt CaptureOptions) (CaptureResult, error) {
 	wroteSnapshot := false
 	var snapshotBody []byte
 	if herdrOK {
-		changed := !haveBaseline
-		if haveBaseline {
+		changed := !haveBaseline || baseline.BootID != opt.BootID
+		if haveBaseline && baseline.BootID == opt.BootID {
 			var changedErr error
 			changed, changedErr = deskChanged(baseline.Panes, baseline.Layouts, panes, layouts)
 			if changedErr != nil {
@@ -200,17 +205,33 @@ func Capture(ctx context.Context, opt CaptureOptions) (CaptureResult, error) {
 		return finish(nil)
 	}
 	body, ok, err := matchingSnapshotBody(spool, panes, layouts)
-	if err != nil || !ok {
+	if err != nil {
 		return finish(err)
 	}
-	current, readErr := os.ReadFile(latestPath)
-	if readErr == nil && bytes.Equal(current, body) {
-		return finish(backfillHistory(opt.StateDir, now, body, opt.DirSync, goos))
+	if ok {
+		if err := backfillHistory(opt.StateDir, now, body, opt.DirSync, goos); err != nil {
+			return finish(err)
+		}
 	}
-	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-		return finish(readErr)
+	localID, err := newSnapshotID()
+	if err != nil {
+		return finish(err)
 	}
-	return finish(writeDesk(opt.StateDir, latestPath, now, body, opt.DirSync, goos))
+	localBody, err := contract.MarshalSnapshot(contract.Snapshot{
+		SnapshotID: localID,
+		Host:       opt.Host,
+		BootID:     opt.BootID,
+		CapturedAt: observed,
+		Panes:      panes,
+		Layouts:    layouts,
+	})
+	if err != nil {
+		return finish(err)
+	}
+	if _, err := contract.ValidateSnapshot(localBody); err != nil {
+		return finish(err)
+	}
+	return finish(writeDesk(opt.StateDir, latestPath, now, localBody, opt.DirSync, goos))
 }
 
 func backfillHistory(stateDir string, now time.Time, body []byte, dirSync func(string) error, goos string) error {

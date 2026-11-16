@@ -103,7 +103,7 @@ func dispatch(args []string, in io.Reader, out, errW io.Writer, home string, hom
 			fmt.Fprintln(errW, "Não foi possível gravar a captura.")
 			return 1
 		}
-		return runCommand(nil, errW, opt)
+		return runCommand(nil, errW, opt, home)
 	case "service":
 		if homeErr != nil {
 			fmt.Fprintln(errW, "Não foi possível operar o serviço.")
