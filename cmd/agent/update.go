@@ -179,11 +179,32 @@ func runUpdate(e *env, opts updateOptions) error {
 	if len(replace) == 1 {
 		writeLine(e.out, styleMuted.Render("herdr-recall-server não estava neste diretório e não foi instalado."))
 	}
-	return afterUpdate(ctx, e, opts.restart)
+	return afterUpdate(ctx, e, exe, opts.restart)
 }
 
-func afterUpdate(ctx context.Context, e *env, restart bool) error {
+// unitRunsBinary reports whether the installed unit starts exe.
+func unitRunsBinary(e *env, exe string) bool {
+	path := unitPath(e.home, e.goos)
+	if path == "" {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	installed := agent.InstalledExe(string(raw))
+	if resolved, err := filepath.EvalSymlinks(installed); err == nil {
+		installed = resolved
+	}
+	return installed == exe
+}
+
+func afterUpdate(ctx context.Context, e *env, exe string, restart bool) error {
 	if !unitInstalled(e.home, e.goos) {
+		return nil
+	}
+	if !unitRunsBinary(e, exe) {
+		writeLine(e.out, styleMuted.Render("O serviço instalado usa outro binário e não foi afetado."))
 		return nil
 	}
 	var argv []string

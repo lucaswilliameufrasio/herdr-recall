@@ -153,9 +153,11 @@ case "$action" in
     ;;
   *)
     printf 'Pronto: %s em %s.\n' "$action" "$bin_dir"
-    if [ -f "$HOME/.config/systemd/user/herdr-recall.service" ]; then
+    unit="$HOME/.config/systemd/user/herdr-recall.service"
+    plist="$HOME/Library/LaunchAgents/dev.herdr-recall.agent.plist"
+    if [ -f "$unit" ] && grep -qF "$bin_dir/herdr-recall" "$unit"; then
       printf '%s\n' 'O serviço segue com o binário antigo até reiniciar: systemctl --user restart herdr-recall'
-    elif [ -f "$HOME/Library/LaunchAgents/dev.herdr-recall.agent.plist" ]; then
+    elif [ -f "$plist" ] && grep -qF "$bin_dir/herdr-recall" "$plist"; then
       printf '%s\n' "O serviço segue com o binário antigo até reiniciar: launchctl kickstart -k gui/$(id -u)/dev.herdr-recall.agent"
     fi
     ;;

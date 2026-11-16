@@ -141,10 +141,10 @@ func TestInstallerMentionsServiceRestartAfterUpgrade(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(unit), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(unit, []byte("[Service]\n"), 0o600); err != nil {
+	dest := filepath.Join(root, "bin")
+	if err := os.WriteFile(unit, []byte("[Service]\nExecStart="+filepath.Join(dest, "herdr-recall")+" run\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	dest := filepath.Join(root, "bin")
 	for _, v := range []string{"v0.4.0", "v0.4.1"} {
 		writeBundle(t, filepath.Join(root, v), v)
 		cmd := exec.Command("sh", filepath.Join(root, v, "install.sh"), "--bin-dir", dest)

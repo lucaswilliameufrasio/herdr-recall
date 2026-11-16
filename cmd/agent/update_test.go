@@ -88,7 +88,7 @@ func TestUpdateUpgradesBothBinariesAndRestartsOnRequest(t *testing.T) {
 	rig := newUpdateRig(t, "v0.4.0", "v0.5.0", "v0.5.0")
 	unit := unitPath(rig.home, "linux")
 	os.MkdirAll(filepath.Dir(unit), 0o700)
-	os.WriteFile(unit, []byte("[Service]\n"), 0o600)
+	os.WriteFile(unit, []byte("[Service]\nExecStart="+filepath.Join(rig.bin, "herdr-recall")+" run\n"), 0o600)
 
 	code, out, _ := runCLI(t, rig.home, "update", "--check")
 	if code != 0 || !strings.Contains(out, "disponível: v0.5.0") || rig.installed(t, "herdr-recall") != "herdr-recall v0.4.0" {
@@ -150,5 +150,16 @@ func TestUpdateRefusesTemporaryBinary(t *testing.T) {
 	executablePath = func() (string, error) { return "/tmp/go-build123/b001/exe/agent", nil }
 	if code, _, errW := runCLI(t, rig.home, "update"); code != 1 || !strings.Contains(errW, "não é uma instalação") {
 		t.Fatalf("%d %q", code, errW)
+	}
+}
+
+func TestUpdateLeavesAServiceOfAnotherBinaryAlone(t *testing.T) {
+	rig := newUpdateRig(t, "v0.4.0", "v0.5.0", "v0.5.0")
+	unit := unitPath(rig.home, "linux")
+	os.MkdirAll(filepath.Dir(unit), 0o700)
+	os.WriteFile(unit, []byte("[Service]\nExecStart=/outro/lugar/herdr-recall run\n"), 0o600)
+	code, out, _ := runCLI(t, rig.home, "update", "--restart")
+	if code != 0 || !strings.Contains(out, "usa outro binário") || len(rig.restarts) != 0 {
+		t.Fatalf("%d %q %v", code, out, rig.restarts)
 	}
 }
