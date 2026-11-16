@@ -65,7 +65,7 @@ Linux e macOS (amd64 e arm64):
 curl --proto '=https' --tlsv1.2 -fsSL https://github.com/lucaswilliameufrasio/herdr-recall/releases/download/$tag/herdr-recall-installer.sh | sh
 \`\`\`
 
-O instalador verifica SHA-256, instala agente e servidor em \`~/.local/bin\` e não sobrescreve arquivos. Consulte o [guia de primeira execução](https://github.com/lucaswilliameufrasio/herdr-recall/blob/$tag/README.md#primeira-execução-na-mesma-máquina).
+O instalador verifica SHA-256 e instala agente e servidor em \`~/.local/bin\`. Sobre uma versão mais antiga, atualiza; sobre a mesma, não faz nada; um downgrade exige \`--allow-downgrade\` e uma instalação sem versão (v0.3.0 ou anterior) exige \`--force\`, passados com \`| sh -s -- --force\`. Depois, \`herdr-recall update\` atualiza sozinho. Consulte o [guia de primeira execução](https://github.com/lucaswilliameufrasio/herdr-recall/blob/$tag/README.md#primeira-execução-na-mesma-máquina).
 O checksum detecta corrupção, mas não protege contra substituição da release e do checksum juntos.
 
 ## Downloads
